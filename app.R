@@ -171,8 +171,14 @@ friendly_dice_error <- function(err_msg) {
 }
 
 read_status <- function(job_id) {
+  if (is.null(job_id) || !nzchar(job_id)) return(NULL)
+  
   f <- file.path(job_dir(job_id), "status.json")
-  if (!file.exists(f)) return(NULL)
+  if (!nzchar(f) || !file.exists(f)) return(NULL)
+  
+  txt <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+  if (length(txt) == 0) return(NULL)
+  
   jsonlite::read_json(f, simplifyVector = TRUE)
 }
 
@@ -799,27 +805,40 @@ server <- function(input, output, session) {
     if (identical(st$state, "finished") && !isTRUE(loaded_once())) {
       jd <- job_dir(jid)
       
-      if (file.exists(file.path(jd, "dice_result.rds")))
-        dice_result(readRDS(file.path(jd, "dice_result.rds")))
-      if (file.exists(file.path(jd, "modules_summary.rds")))
-        modules_summary(readRDS(file.path(jd, "modules_summary.rds")))
-      if (file.exists(file.path(jd, "modules_membership.rds")))
-        modules_membership(readRDS(file.path(jd, "modules_membership.rds")))
-      if (file.exists(file.path(jd, "modules_edges.rds")))
-        modules_edges(readRDS(file.path(jd, "modules_edges.rds")))
-      if (file.exists(file.path(jd, "expr_input.rds")))
-        expr_df(readRDS(file.path(jd, "expr_input.rds")))
-      if (file.exists(file.path(jd, "dge_input.rds")))
-        dge_df(readRDS(file.path(jd, "dge_input.rds")))
+      f1 <- file.path(jd, "dice_result.rds")
+      if (nzchar(f1) && file.exists(f1))
+        dice_result(readRDS(f1))
+      
+      f2 <- file.path(jd, "modules_summary.rds")
+      if (nzchar(f2) && file.exists(f2))
+        modules_summary(readRDS(f2))
+      
+      f3 <- file.path(jd, "modules_membership.rds")
+      if (nzchar(f3) && file.exists(f3))
+        modules_membership(readRDS(f3))
+      
+      f4 <- file.path(jd, "modules_edges.rds")
+      if (nzchar(f4) && file.exists(f4))
+        modules_edges(readRDS(f4))
+
+      f5 <- file.path(jd, "expr_input.rds")
+      if (nzchar(f5) && file.exists(f5))
+        expr_df(readRDS(f5))
+      
+      f6 <- file.path(jd, "dge_input.rds")
+      if (nzchar(f6) && file.exists(f6))
+        dge_df(readRDS(f6))
       
       
       log_file <- file.path(jd, "log.txt")
-      if (file.exists(log_file)) {
-        log_lines <- readLines(log_file, warn = FALSE)
-        phase_lines(grep("Genes in Phase", log_lines, value = TRUE))
-        dice_log("")
-        add_log("----- Loaded saved job log -----")
-        add_log(log_lines)
+      if (nzchar(log_file) && file.exists(log_file)) {
+        log_lines <- tryCatch(readLines(log_file, warn = FALSE), error = function(e) character(0))
+        if (length(log_lines) > 0) {
+          phase_lines(grep("Genes in Phase", log_lines, value = TRUE))
+          dice_log("")
+          add_log("----- Loaded saved job log -----")
+          add_log(log_lines)
+        }
       }
       
       loaded_once(TRUE)
@@ -859,7 +878,13 @@ server <- function(input, output, session) {
   
   observeEvent(input$dge_file, {
     req(input$dge_file)
+    req(input$dge_file)
+    req(input$dge_file$datapath)
+    req(nzchar(input$dge_file$datapath))
+    
     path <- input$dge_file$datapath
+    req(file.exists(path))
+    
     dge_path(path)
     
     ext <- tolower(tools::file_ext(input$dge_file$name))
@@ -1387,6 +1412,10 @@ server <- function(input, output, session) {
     
     dge_file  <- dge_path()
     expr_file <- expr_path()
+    
+    req(expr_file, dge_file)
+    req(nzchar(expr_file), nzchar(dge_file))
+    req(file.exists(expr_file), file.exists(dge_file))
     
     current_status("Initializing DiCE run…")
     

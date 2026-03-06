@@ -91,6 +91,8 @@ dir.create(jobs_root, showWarnings = FALSE, recursive = TRUE)
 
 job_dir <- function(job_id) file.path(jobs_root, job_id)
 
+print(job_dir)
+
 write_status <- function(job_id, state, message = "", step = NULL, pct = NULL, job_title = NULL) {
   d <- job_dir(job_id)
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
@@ -862,6 +864,8 @@ server <- function(input, output, session) {
     
     expr_path(path)
     
+    print(path)
+    
     ext <- tolower(tools::file_ext(input$expr_file$name))
     expr_tbl <- switch(
       ext,
@@ -891,6 +895,8 @@ server <- function(input, output, session) {
     req(file.exists(path))
     
     dge_path(path)
+    
+    print(path)
     
     ext <- tolower(tools::file_ext(input$dge_file$name))
     dge_tbl <- switch(

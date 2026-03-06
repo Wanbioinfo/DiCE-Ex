@@ -58,19 +58,24 @@ home_tab <- function() {
               "Users can explore flexible options—including Information Gain (IG),",
               "multiple centrality metrics, and PPI subnetwork visualization—through",
               "a simple, interactive interface.",
-              "The validated DiCE approach (PMID: 40626556) has successfully identified",
-              "key genes and pathways in prostate cancer and is applicable to both human",
-              "and mouse transcriptomic datasets.",
+              "The validated DiCE approach"
+            ),
+            tags$a(
+              "(PMID: 40626556)",
+              href = "https://pubmed.ncbi.nlm.nih.gov/40626556/",
+              target = "_blank"
+            ),
+            paste(
+              "has successfully identified key genes and pathways in prostate cancer",
+              "and is applicable to both human and mouse transcriptomic datasets.",
               "DiCE-Web enables researchers to perform end-to-end gene discovery",
               "directly from their data with clarity and efficiency."
             ),
-            style = "
-              max-width:950px;
-              margin-left:auto;
-              margin-right:auto;
-              line-height:1.6;
-              color:#333;
-            "
+            style = "max-width:950px;
+                    margin-left:auto;
+                    margin-right:auto;
+                    line-height:1.6;
+                    color:#333;"
           )
         ),
         
@@ -90,6 +95,8 @@ home_tab <- function() {
           fluidRow(
             column(
               width = 6,
+              offset = 3,
+              
               actionLink(
                 inputId = "home_docs",
                 label   = NULL,
@@ -100,23 +107,6 @@ home_tab <- function() {
                   div(class = "feature-icon", shiny::icon("question-circle")),
                   h4("Documentation"),
                   p("See detailed guides, input formats, and workflow examples.")
-                )
-                
-              )
-            ),
-            
-            column(
-              width = 6,
-              actionLink(
-                inputId = "home_updates",
-                label   = NULL,
-                class   = "home-card-link",
-                
-                div(
-                  class = "feature-card",
-                  div(class = "feature-icon", shiny::icon("file-alt")),
-                  h4("Latest Updates"),
-                  p("Stay current with new DiCE package features and enhancements.")
                 )
                 
               )

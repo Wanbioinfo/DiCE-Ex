@@ -21,12 +21,12 @@ normalize_dge_cols <- function(dge_data){
   adjP_cols <- c("adj.p.val","adj_pval","adjp","padj",
                  "padjusted","adjpval","adjpv",
                  "qval","q.value","qvalue","q_value",
-                 "fdr","fdr_pval")
+                 "fdr","fdr_pval","p_val_adj")
   logfc_cols <- c("logfc","log2foldchange","logfc.value",
              "log2fc","log_fold_change","log2_fold_change",
              "log2ratio","log2_ratio","lfc")
   
-  colnames(dge_data)[tolower(colnames(dge_data)) %in% tolower(gene_cols)] <- "Gene.Name"
+  colnames(dge_data)[tolower(colnames(dge_data)) %in% tolower(gene_cols)] <- "Gene.Symbol"
   colnames(dge_data)[tolower(colnames(dge_data)) %in% tolower(pval_cols)] <- "P.Value"
   colnames(dge_data)[tolower(colnames(dge_data)) %in% tolower(adjP_cols)] <- "adj.P.Val"
   colnames(dge_data)[tolower(colnames(dge_data)) %in% tolower(logfc_cols)] <- "logFC"

@@ -84,7 +84,7 @@ run_phase3 <- function(interactions, geneExp_to_corr, treatment, control,
   
   
   # Merge treatment and control centralities
-  merge_centralities_df <- merge(centralities_treatment, centralities_control, by = "Gene.Name")
+  merge_centralities_df <- merge(centralities_treatment, centralities_control, by = "Gene.Symbol")
 
   # Combine interactions edge weights in treatment and control
   merge_interactions_df <- merge(interactions_treatment, interactions_control, 
@@ -106,7 +106,7 @@ run_phase3 <- function(interactions, geneExp_to_corr, treatment, control,
 #' @noRd
 getNetworkGene_expression <- function(geneExp_data,mapped_proteins){
   class <- geneExp_data[,ncol(geneExp_data)]
-  filtered_geneExp_data <- geneExp_data[,colnames(geneExp_data) %in% mapped_proteins$Gene.Name]
+  filtered_geneExp_data <- geneExp_data[,colnames(geneExp_data) %in% mapped_proteins$Gene.Symbol]
   filtered_geneExp_data <- as.data.frame(filtered_geneExp_data)
   
   filtered_geneExp_data <- cbind(filtered_geneExp_data, class)
@@ -124,7 +124,7 @@ getNetworkGene_expression <- function(geneExp_data,mapped_proteins){
 #' @param phase2_res Dataframe of Phase 2 results
 #'
 #' @return Dataframe of PPIs 
-#' @return Dataframe of vertices with the Gene.Name and String_ID
+#' @return Dataframe of vertices with the Gene.Symbol and String_ID
 #' @noRd
 extract_PPI <- function(string_protInfo_file, string_ppi_file, phase2_res){
   return(create_PPI_fromPhase2(string_protInfo_file, string_ppi_file, phase2_res))

@@ -96,28 +96,38 @@ createFinalRanking <- function(dge_data, phase1_res,
   
   # add Phase2 genes information for the final rank
   # add only the genes found in phase2
-  phase2_cols <- c("Gene.Name","logFC","P.Value","adj.P.Val",(if ("IG" %in% colnames(phase2_res)) "IG"),"Phase" )
-  phase2_res <- phase2_res[,phase2_cols]
-
-  
-  only_phase2_rows <- phase2_res %>%
-    as_tibble() %>%  
-    filter(!(Gene.Name %in% final_rank_df$Gene.Name)) %>%
-    # dynamically add one rank column per centrality, all set to worst rank = nrow(phase2_res)
-    mutate(!!!setNames(rep(list(nrow(phase2_res)), length(rank_cols)), rank_cols))
-  
-  final_rank_df <- bind_rows(final_rank_df, only_phase2_rows)
-  
+  if (!is.null(phase2_res) && nrow(phase2_res) > 0) {
+    
+    phase2_cols <- c(
+      "Gene.Symbol",
+      "logFC",
+      "P.Value",
+      "adj.P.Val",
+      if ("IG" %in% colnames(phase2_res)) "IG",
+      "Phase"
+    )
+    
+    phase2_res <- phase2_res[, phase2_cols]
+    
+    only_phase2_rows <- phase2_res %>%
+      as_tibble() %>%
+      filter(!(Gene.Symbol %in% final_rank_df$Gene.Symbol)) %>%
+      mutate(!!!setNames(rep(list(nrow(phase2_res)), length(rank_cols)), 
+                         rank_cols))
+    
+    final_rank_df <- bind_rows(final_rank_df, only_phase2_rows)
+    
+  }
   
   
   # add Phase1 genes information for the final rank
   # add only the genes found in phase1
-  phase1_cols <- c("Gene.Name","logFC","P.Value","adj.P.Val",(if ("IG" %in% colnames(phase1_res)) "IG"),"Phase" )
+  phase1_cols <- c("Gene.Symbol","logFC","P.Value","adj.P.Val",(if ("IG" %in% colnames(phase1_res)) "IG"),"Phase" )
   phase1_res <- phase1_res[,phase1_cols]
   
   
   only_phase1_rows <- phase1_res %>%
-    filter(!(Gene.Name %in% final_rank_df$Gene.Name)) %>%
+    filter(!(Gene.Symbol %in% final_rank_df$Gene.Symbol)) %>%
     # dynamically add one rank column per centrality, all set to worst rank = nrow(phase1_res)
     mutate(!!!setNames(rep(list(nrow(phase1_res)), length(rank_cols)), rank_cols))
 
@@ -126,10 +136,10 @@ createFinalRanking <- function(dge_data, phase1_res,
   
   # Add all expressed genes information for the final rank
   # Add only the remaining expressed genes
-  dge_data <- dge_data[,c("Gene.Name","logFC","P.Value","adj.P.Val")]
+  dge_data <- dge_data[,c("Gene.Symbol","logFC","P.Value","adj.P.Val")]
   
   remaining_genes_rows <- dge_data %>%
-    filter(!(Gene.Name %in% final_rank_df$Gene.Name)) %>%
+    filter(!(Gene.Symbol %in% final_rank_df$Gene.Symbol)) %>%
     # dynamically add one rank column per centrality, all set to worst rank = nrow(dge_data)
     mutate(!!!setNames(rep(list(nrow(dge_data)), length(rank_cols)), rank_cols))
 
@@ -147,12 +157,16 @@ createFinalRanking <- function(dge_data, phase1_res,
   
   final_rank_df <- final_rank_df[order(final_rank_df[,"ProductofRank"],
                                        decreasing = TRUE ),]
-  final_rank_df$Final_ensembleRank <- seq_len(nrow(final_rank_df))
+  final_rank_df$Ensemble_Rank <- seq_len(nrow(final_rank_df))
   
   # Force Phase1, Phase2 and DGE ensemble ranks to the highest one in the group  
-  final_rank_df$Final_ensembleRank[final_rank_df$Phase == "I"] <- nrow(phase1_res)
-  final_rank_df$Final_ensembleRank[final_rank_df$Phase == "II"] <- nrow(phase2_res)
-  final_rank_df$Final_ensembleRank[is.na(final_rank_df$Phase)] <- nrow(dge_data)
+  final_rank_df$Ensemble_Rank[final_rank_df$Phase == "I"] <- nrow(phase1_res)
+  
+  if ("II" %in% final_rank_df$Phase) {
+    final_rank_df$Ensemble_Rank[final_rank_df$Phase == "II"] <- nrow(phase2_res)
+  }
+  
+  final_rank_df$Ensemble_Rank[is.na(final_rank_df$Phase)] <- nrow(dge_data)
   
   # Replace NA with "-" in Phase column
   final_rank_df$Phase[is.na(final_rank_df$Phase)] <- "-"

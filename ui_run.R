@@ -30,11 +30,20 @@ run_tab <- function() {
             div(
               style = "display:flex; justify-content:flex-end; gap:12px; align-items:center;",
               
-              actionButton(
-                "load_sample_data",
-                "Try on sample data",
-                class = "btn btn-info",
-                icon = icon("magic")
+              div(
+                class = "sample-select-wrap",
+                selectInput(
+                  "sample_dataset",
+                  label = NULL,
+                  choices = c(
+                    "Select sample dataset" = "",
+                    "Human sample data" = "human",
+                    "Mouse sample data" = "mouse"
+                  ),
+                  selected = "",
+                  width = "220px",
+                  selectize = FALSE
+                )
               ),
               
               downloadButton(
@@ -259,7 +268,7 @@ run_tab <- function() {
             
             p(
               style = "margin-bottom:10px;",
-              "Identify discriminative genes using Information Gain (IG) or Weighted IG (WIG)."
+              "Identify discriminative genes using Information Gain (IG) or Weighted IG (WIG) or you can skip this phase."
             ),
             
             fluidRow(
@@ -270,7 +279,8 @@ run_tab <- function() {
                   "Information Gain method",
                   choices = c(
                     "Information Gain (IG)"           = "IG",
-                    "Weighted Information Gain (WIG)" = "WIG"
+                    "Weighted Information Gain (WIG)" = "wIG",
+                    "None" = "none"
                   ),
                   selected = "IG"
                 )
@@ -293,13 +303,25 @@ run_tab <- function() {
                   "phase2_ig_cutoff",
                   "IG cutoff rule",
                   choices = c(
-                    "IG > mean (all genes)"             = "all_mean",
-                    "IG > median (all genes)"         = "all_median",
-                    "IG > mean (IG > 0)"            = "nonzero_mean",
-                    "IG > median (IG > 0)"        = "nonzero_median",
-                    "IG > 0"   = "all_nonzero"
+                    "IG > mean (all genes)" = "all_mean",
+                    "IG > median (all genes)" = "all_median",
+                    "IG > mean (IG > 0)" = "nonzero_mean",
+                    "IG > median (IG > 0)" = "nonzero_median",
+                    "IG > 0" = "all_nonzero",
+                    "Custom" = "custom"
                   ),
                   selected = "all_mean"
+                ),
+                
+                conditionalPanel(
+                  condition = "input.phase2_ig_cutoff == 'custom'",
+                  numericInput(
+                    "phase2_custom_ig",
+                    "Enter custom IG cutoff",
+                    value = 0.01,
+                    min = 0,
+                    step = 0.001
+                  )
                 )
               )
             )

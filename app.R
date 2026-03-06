@@ -10,6 +10,7 @@ library(readr)
 library(readxl)
 #library(DiCE)
 library(future)
+library(shinyWidgets)
 
 plan(multisession, workers = 1)
 options(future.globals.maxSize = 8 * 1024^3)  # adjust if needed
@@ -29,10 +30,15 @@ library(vroom)
 # Souce DiCE package
 library("dplyr")
 library("tibble")
+library("stringr")
+library('tidyr')
+library('purrr')
+library('Matrix')
 library("FSelectorRcpp")
 library("igraph")
 library("data.table")
 library("NetWeaver")
+library('NewWave')
 library("praznik")
 library("zinbwave")
 library("SingleCellExperiment")
@@ -42,20 +48,20 @@ library("utils")
 library("openxlsx")
 library("BiocParallel")
 library("SummarizedExperiment")
-library("purrr")
 library("parallel")
 library("annotate")
 library("org.Hs.eg.db")
 library("AnnotationDbi")
 library("org.Mm.eg.db")
 library("readxl")
+library("scuttle")
 
+source("DiCE/annotate_TFs.R")
 source("DiCE/calculate_NetCentralities.R")
 source("DiCE/calculate_weightedIG.R")
 source("DiCE/corr_calculations.R")
 source("DiCE/createFinalRanking.R")
 source("DiCE/createPPI.R")
-source("DiCE/detect_unWeightedCommunities.R")
 source("DiCE/DiCE.R")
 source("DiCE/fileReader.R")
 source("DiCE/geneExp_denoise_models.R")
@@ -66,14 +72,19 @@ source("DiCE/Phase_2.R")
 source("DiCE/Phase_3.R")
 source("DiCE/Phase_4.R")
 source("DiCE/protein_coding_filter.R")
+source("DiCE/unweighted_module_analysis.R")
+source("DiCE/weighted_module_analysis_helpers.R")
+source("DiCE/weighted_module_analysis.R")
 source("DiCE/zinbWaVE_denoising.R")
+source("DiCE/newWave_denoising.R")
 
 # Source UI pieces
 source("ui_home.R")
 source("ui_about.R")
 source("ui_run.R")
-source("ui_team.R")
 source("ui_results.R")
+source("ui_cli.R")
+source("ui_team.R")
 
 ################################
 ## Job persistence helpers
@@ -199,6 +210,51 @@ cleanup_jobs <- function(root = "jobs", keep_days = 7) {
   }
 }
 
+add_ncbi_gene_links <- function(df, species = "human",
+                                gene_col_candidates = c("Gene.Symbol", "Gene.Name", "Gene", "gene")) {
+  if (!is.data.frame(df) || nrow(df) == 0) return(df)
+  
+  # Pick the gene symbol column
+  gene_col <- gene_col_candidates[gene_col_candidates %in% names(df)][1]
+  if (is.na(gene_col) || is.null(gene_col)) return(df)
+  
+  symbols <- as.character(df[[gene_col]])
+  symbols <- trimws(symbols)
+  
+  # Choose annotation DB by species
+  db <- switch(
+    tolower(species),
+    "human" = org.Hs.eg.db::org.Hs.eg.db,
+    "mouse" = org.Mm.eg.db::org.Mm.eg.db,
+    stop("Unsupported species for GeneID mapping: ", species)
+  )
+  
+  # Map SYMBOL -> ENTREZID
+  map_df <- AnnotationDbi::select(
+    db,
+    keys     = unique(symbols),
+    keytype  = "SYMBOL",
+    columns  = c("ENTREZID")
+  )
+  
+  # If duplicates exist, keep first mapping per SYMBOL
+  map_df <- map_df[!duplicated(map_df$SYMBOL), c("SYMBOL", "ENTREZID")]
+  id_map <- stats::setNames(map_df$ENTREZID, map_df$SYMBOL)
+  
+  entrez <- unname(id_map[symbols])
+  
+  # Build HTML links (fallback to plain symbol if no ID)
+  link_prefix <- "https://www.ncbi.nlm.nih.gov/datasets/gene/"
+  df[[gene_col]] <- ifelse(
+    !is.na(entrez) & nzchar(entrez),
+    sprintf('<a href="%s%s/" target="_blank">%s</a>', link_prefix, entrez, symbols),
+    symbols
+  )
+  
+  attr(df, "gene_col_linked") <- gene_col
+  df
+}
+
 ################################
 ## Navbar
 ################################
@@ -208,7 +264,7 @@ make_navbar <- function(selected_tab = "home") {
     theme = shinytheme("flatly"),
     title = div(
       span("DiCE-Ex", style = "font-weight:600; font-size: 1.3em;"),
-      span("v1.1.3",  style = "font-size:0.8em; margin-left:8px; color:#dddddd;")
+      span("v1.2.0",  style = "font-size:0.8em; margin-left:8px; color:#dddddd;")
     ),
     windowTitle = "DiCE-Ex",
     selected    = selected_tab,   # <-- IMPORTANT
@@ -216,6 +272,7 @@ make_navbar <- function(selected_tab = "home") {
     about_tab(),
     run_tab(),
     results_tab(),
+    cli_tab(), 
     team_tab()
   )
 }
@@ -268,6 +325,26 @@ ui <- function(request) {
         transition: all 0.2s ease;
       }
       
+      .sample-select-wrap .form-group {
+        margin-bottom: 0 !important;
+      }
+      
+      .sample-select-wrap select.form-control {
+        height: 51px !important;
+        min-height: 51px !important;
+        border-radius: 6px !important;
+        background-color: #e8f4f1 !important;
+        border: 1px solid #b7d7cf !important;
+        color: #1f3b4d !important;
+        font-size: 15px !important;
+        font-weight: 500;
+      }
+      
+      .sample-select-wrap select.form-control:focus {
+        border-color: #16a085 !important;
+        box-shadow: 0 0 0 0.2rem rgba(22,160,133,0.15) !important;
+      }
+
       .feature-card:hover {
         transform: translateY(-4px);
         box-shadow: 0 6px 18px rgba(0,0,0,0.08);
@@ -425,6 +502,8 @@ ui <- function(request) {
   )
 }
 
+
+
 ################################
 ## Server
 ################################
@@ -483,6 +562,9 @@ server <- function(input, output, session) {
   observeEvent(input$home_updates, {
     updateNavbarPage(session, "main_nav", "about")
     session$sendCustomMessage("scroll_to_updates", list())
+  })
+  observeEvent(input$go_about_tab, {
+    updateNavbarPage(session, "main_nav", selected = "about")
   })
   
   
@@ -882,16 +964,28 @@ server <- function(input, output, session) {
         df   <- df[keep, , drop = FALSE]
       }
     }
+    # Now add hyperlinks
+    df <- add_ncbi_gene_links(df, species = tolower(input$species))
+    
     df
   })
   
   output$dice_table <- DT::renderDT({
     df <- dice_table_data()
     req(df)
+    
+    # Identify which column contains HTML links
+    gene_col <- attr(df, "gene_col_linked")
+    gene_idx <- if (!is.null(gene_col) && gene_col %in% names(df)) which(names(df) == gene_col) else NULL
+    
+    # Escape everything except the gene column
+    escape_cols <- if (!is.null(gene_idx)) setdiff(seq_along(df), gene_idx) else TRUE
+    
     DT::datatable(
       df,
       filter   = "none",
       rownames = FALSE,
+      escape   = escape_cols,
       options  = list(dom = "lrtip", pageLength = 20, scrollX = TRUE),
       selection = "none"
     )
@@ -970,9 +1064,13 @@ server <- function(input, output, session) {
       paste0("DiCE_results_", job, "_", format(Sys.time(), "%Y%m%d-%H%M%S"), ".xlsx")
     },
     content = function(file) {
-      df <- dice_table_data()
+      
+      df <- dice_result()   # ORIGINAL clean dataframe
       req(df)
-      openxlsx::write.xlsx(as.data.frame(df), file, rowNames = FALSE)
+      
+      if (!is.data.frame(df)) df <- as.data.frame(df)
+      
+      openxlsx::write.xlsx(df, file, rowNames = FALSE)
     }
   )
   
@@ -1127,53 +1225,103 @@ server <- function(input, output, session) {
   ## 12. Download sample data (.zip)
   ################################
   output$download_sample_zip <- downloadHandler(
-    filename = function() "NEPC_sample_data.zip",
+    filename = function() "sample_data.zip",
     content = function(file) {
       zip::zip(
         zipfile = file,
-        files = c("sample_data/NEPC_sample_data_geneExp.csv",
-                  "sample_data/NEPC_sample_data_DGE.csv")
+        files = c("sample_data/sample_Human_data_geneExp.csv",
+                  "sample_data/sample_Human_data_DGE.csv",
+                  "sample_data/sample_Mouse_data_geneExp.csv",
+                  "sample_data/sample_Mouse_data_DGE.csv")
       )
     }
   )
   
   ################################
-  ## 13. Load NEPC sample data
+  ## 13. Load sample data
   ################################
-  observeEvent(input$load_sample_data, {
-    updateTextInput(session, "job_title",     value = "NEPC_DiCE_test")
-    updateTextInput(session, "group_treat",   value = "Tumor")
-    updateTextInput(session, "group_control", value = "Normal")
-    updateRadioButtons(session, "species", selected = "Human")
+  ################################
+  ## 13. Load sample data
+  ################################
+  observeEvent(input$sample_dataset, {
     
-    sample_expr <- "sample_data/NEPC_sample_data_geneExp.csv"
-    sample_dge  <- "sample_data/NEPC_sample_data_DGE.csv"
+    req(input$sample_dataset)
+    if (input$sample_dataset == "") return()
     
-    expr_path(sample_expr)
-    dge_path(sample_dge)
-    
-    # expr_df(readr::read_csv(sample_expr, show_col_types = FALSE))
-    # dge_df(readr::read_csv(sample_dge,  show_col_types = FALSE))
-    
-    expr_df(vroom::vroom(expr_path(), show_col_types = FALSE))
-    dge_df(vroom::vroom(dge_path(), show_col_types = FALSE))
-    
-    session$sendCustomMessage("loadFiles",
-                              list(expr = "NEPC_sample_data_geneExp.csv", dge = "NEPC_sample_data_DGE.csv")
-    )
-    
-    showModal(modalDialog(
-      title = "Sample data loaded",
-      HTML(paste0(
-        "NEPC example expression and DGE files have been loaded successfully.<br><br>",
-        "<b>Job title:</b> NEPC_DiCE_test<br>",
-        "<b>Treatment:</b> Tumor<br>",
-        "<b>Control:</b> Normal<br>",
-        "<b>Species:</b> Human"
-      )),
-      easyClose = TRUE,
-      footer = modalButton("Dismiss")
-    ))
+    if (input$sample_dataset == "human") {
+      
+      updateTextInput(session, "job_title",     value = "Human_DiCE_test")
+      updateTextInput(session, "group_treat",   value = "Tumor")
+      updateTextInput(session, "group_control", value = "Normal")
+      updateRadioButtons(session, "species", selected = "Human")
+      
+      sample_expr <- "sample_data/sample_Human_data_geneExp.csv"
+      sample_dge  <- "sample_data/sample_Human_data_DGE.csv"
+      
+      expr_path(sample_expr)
+      dge_path(sample_dge)
+      
+      expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
+      dge_df(vroom::vroom(sample_dge, show_col_types = FALSE))
+      
+      session$sendCustomMessage(
+        "loadFiles",
+        list(
+          expr = "sample_Human_data_geneExp.csv",
+          dge  = "sample_Human_data_DGE.csv"
+        )
+      )
+      
+      showModal(modalDialog(
+        title = "Human sample data loaded",
+        HTML(paste0(
+          "Human sample expression and DGE files have been loaded successfully.<br><br>",
+          "<b>Job title:</b> Human_DiCE_test<br>",
+          "<b>Treatment:</b> Tumor<br>",
+          "<b>Control:</b> Normal<br>",
+          "<b>Species:</b> Human"
+        )),
+        easyClose = TRUE,
+        footer = modalButton("Dismiss")
+      ))
+      
+    } else if (input$sample_dataset == "mouse") {
+      
+      updateTextInput(session, "job_title",     value = "Mouse_DiCE_test")
+      updateTextInput(session, "group_treat",   value = "POR")
+      updateTextInput(session, "group_control", value = "WT")
+      updateRadioButtons(session, "species", selected = "Mouse")
+      
+      sample_expr <- "sample_data/sample_Mouse_data_geneExp.csv"
+      sample_dge  <- "sample_data/sample_Mouse_data_DGE.csv"
+      
+      expr_path(sample_expr)
+      dge_path(sample_dge)
+      
+      expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
+      dge_df(vroom::vroom(sample_dge, show_col_types = FALSE))
+      
+      session$sendCustomMessage(
+        "loadFiles",
+        list(
+          expr = "sample_Mouse_data_geneExp.csv",
+          dge  = "sample_Mouse_data_DGE.csv"
+        )
+      )
+      
+      showModal(modalDialog(
+        title = "Mouse sample data loaded",
+        HTML(paste0(
+          "Mouse sample expression and DGE files have been loaded successfully.<br><br>",
+          "<b>Job title:</b> Mouse_DiCE_test<br>",
+          "<b>Treatment:</b> POR<br>",
+          "<b>Control:</b> WT<br>",
+          "<b>Species:</b> Mouse"
+        )),
+        easyClose = TRUE,
+        footer = modalButton("Dismiss")
+      ))
+    }
   })
   
   ################################
@@ -1233,9 +1381,10 @@ server <- function(input, output, session) {
       sig_metric   = input$significant_metric,
       sig_thresh   = input$significant_thresh,
       logfc_thresh = input$phase1_logfc_thresh,
-      ig_method    = ifelse(input$phase2_ig_method == "WIG", "yes", "no"),
+      ig_method    = input$phase2_ig_method,
       B            = input$phase2_B,
       ig_cutoff    = input$phase2_ig_cutoff,
+      custom_ig    = input$phase2_custom_ig,
       corr_type    = tolower(input$phase3_corr),
       centralities = input$phase4_cents,
       dice_cutoff  = if (input$phase4_dice_cutoff == "topK")
@@ -1279,11 +1428,13 @@ server <- function(input, output, session) {
       log_vec   <- character()
       result_df <- NULL
       modules   <- NULL
+      dice_res <- NULL
+      phase3_interactions <- NULL
       
       log_vec <- capture.output(
         withCallingHandlers(
           {
-            result_df <- perform_DiCE(
+            dice_res <- perform_DiCE(
               data_type             = "bulkRNA-seq",
               species               = params$species,
               dge_file_path         = dge_file,
@@ -1293,10 +1444,10 @@ server <- function(input, output, session) {
               loose_criteria        = params$sig_metric,
               loose_cutoff          = params$sig_thresh,
               logFC_cutoff          = params$logfc_thresh,
-              is_wIG_needed         = params$ig_method,
+              ig_method             = params$ig_method,
               B                     = params$B,
               ig_cutoff             = params$ig_cutoff,
-              norm_type             = "logNorm",
+              ig_custom_cutoff      = params$custom_ig,
               corr_mode             = "directCorr",
               corr_method           = params$corr_type,
               centrality_list       = params$centralities,
@@ -1311,15 +1462,22 @@ server <- function(input, output, session) {
                          pct=95,
                          job_title=params$job_title)
             
-            dice_genes_df <- as.data.frame(result_df)
-            phase_col <- if ("Phase" %in% names(dice_genes_df)) "Phase" else if ("phase" %in% names(dice_genes_df)) "phase" else NULL
+            result_df <- as.data.frame(dice_res$dice_results_df)
+            
+            phase3_interactions <- dice_res$interactions_df
+            
+            phase_col <- if ("Phase" %in% names(result_df)) "Phase" else if ("phase" %in% names(result_df)) "phase" else NULL
             if (is.null(phase_col)) stop("Could not find Phase column in DiCE results.")
             
-            dice_genes_df <- dice_genes_df[dice_genes_df[[phase_col]] == "DiCE", , drop = FALSE]
+            dice_genes_df <- result_df[result_df[[phase_col]] == "DiCE", , drop = FALSE]
             if (nrow(dice_genes_df) == 0) stop("No rows with Phase == 'DiCE' found; cannot run module detection.")
             
-            modules <- detect_DiCE_PPI_unweightedModules(
-              dice_genes_df = dice_genes_df,
+            print(class(dice_genes_df))
+            print(colnames(dice_genes_df))
+            dice_genes <- dice_genes_df$Gene.Symbol
+            
+            modules <- detect_PPI_unweightedModules(
+              gene_list     = dice_genes,
               species       = params$species,
               seed          = 123
             )
@@ -1405,6 +1563,7 @@ server <- function(input, output, session) {
         job_title = input$job_title
       )
       
+      print(err_raw)
       
       add_log(paste("DiCE run failed:", conditionMessage(e)))
       current_status("Error.")

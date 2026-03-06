@@ -81,17 +81,17 @@ PPI_network_analysis <- function(interactions,class_geneExp,corr_matrix,centrali
            DiCE supports for betweeness/eigen vector/authority/strength/closeness/pagerank/harmonic !")
     }
     
-    # Convert row names to a 'Gene.Name' column
+    # Convert row names to a 'Gene.Symbol' column
     cent_df <- cent_df %>%
-      tibble::rownames_to_column(var = "Gene.Name")
+      tibble::rownames_to_column(var = "Gene.Symbol")
     
     cent_value_list[[centrality]] <- cent_df
   }
   
   # Combine all by 'Gene' column
-  combined_centralities <- purrr::reduce(cent_value_list, full_join, by = "Gene.Name")
+  combined_centralities <- purrr::reduce(cent_value_list, full_join, by = "Gene.Symbol")
 
-  combined_centralities <- combined_centralities %>% relocate(Gene.Name)
+  combined_centralities <- combined_centralities %>% relocate(Gene.Symbol)
   
   
   return(list(centralities=combined_centralities,

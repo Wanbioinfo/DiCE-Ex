@@ -25,7 +25,7 @@
 #' @param n_cores_boot Integer. Number of CPU cores to use for parallel bootstrap 
 #'   execution. Defaults to `detectCores() - 1` with a minimum of 1.
 #'
-#' @return A data frame with one row per gene containing: Gene.Name, Median weighted IG across bootstrap iterations,
+#' @return A data frame with one row per gene containing: Gene.Symbol, Median weighted IG across bootstrap iterations,
 #'  and Mean weighted IG across bootstrap iterations. 
 #' @noRd
 IG_weighted_resample_fast_repro <- function(df,
@@ -88,7 +88,7 @@ IG_weighted_resample_fast_repro <- function(df,
   }
   
   data.frame(
-    Gene.Name     = feats,
+    Gene.Symbol     = feats,
     IG_wrs_median = IG_wrs_median,
     IG_wrs_mean   = IG_wrs_mean,
     row.names = NULL

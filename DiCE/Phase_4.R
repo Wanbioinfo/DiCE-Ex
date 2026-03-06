@@ -152,9 +152,9 @@ find_DiCEgenes <- function(centralities_df, cutoff, centrality_list, min_passCou
   thresholds  <- list() 
   
   # detect gene identifier column
-  gene_col <- if ("Gene.Name" %in% names(centralities_df)) "Gene.Name" else
+  gene_col <- if ("Gene.Symbol" %in% names(centralities_df)) "Gene.Symbol" else
     if ("Gene" %in% names(centralities_df)) "Gene" else
-      stop("Expected a column 'Gene.Name' or 'Gene'.")
+      stop("Expected a column 'Gene.Symbol' or 'Gene'.")
   
   for (centrality in centrality_list){
     pfx <- centrality_prefix(centrality)
@@ -252,15 +252,15 @@ run_phase4 <- function(centralities_df, cutoff, centrality_list, min_passCount){
   dice_results <- find_DiCEgenes(centralities_df, cutoff, centrality_list, min_passCount)
   DiCE_pass_df <- dice_results$DiCE_pass_df
   pass_summary <- dice_results$pass_summary
-  pass_summary <- pass_summary[,c("Gene.Name","pass_count","pass_centralities")]
+  pass_summary <- pass_summary[,c("Gene.Symbol","pass_count","pass_centralities")]
   
-  centralities_df <- merge(centralities_df, pass_summary, by = "Gene.Name")
+  centralities_df <- merge(centralities_df, pass_summary, by = "Gene.Symbol")
   
   centralities_df <- centralities_df[order(centralities_df[,"ProductofRank"],
                                            decreasing = TRUE ),]
   
   # Rearrange the columns
-  base_cols <- c("Gene.Name", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(centralities_df)) "IG")
+  base_cols <- c("Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(centralities_df)) "IG")
   
   # for each requested centrality, ask for both treatment/control columns
   cent_cols <- unlist(lapply(centrality_list, function(cn) {
@@ -274,10 +274,10 @@ run_phase4 <- function(centralities_df, cutoff, centrality_list, min_passCount){
   
   centralities_df <- centralities_df[, final_cols, drop = FALSE]
   
-  DiCE_genes <- DiCE_pass_df$Gene.Name
-  centralities_df$Phase <- ifelse(centralities_df$Gene.Name %in% DiCE_genes, "DiCE", "III")
+  DiCE_genes <- DiCE_pass_df$Gene.Symbol
+  centralities_df$Phase <- ifelse(centralities_df$Gene.Symbol %in% DiCE_genes, "DiCE", "III")
   
-  DiCE_genes_df <- centralities_df[centralities_df$Gene.Name %in% DiCE_genes,]
+  DiCE_genes_df <- centralities_df[centralities_df$Gene.Symbol %in% DiCE_genes,]
   
   return(list(DiCE_genes_df = DiCE_genes_df,
               phase4_centralities_df = centralities_df))

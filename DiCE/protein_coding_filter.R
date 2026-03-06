@@ -42,21 +42,21 @@ get_protCodingGenes <- function(taxonID){
 
 #' Subset DGE results to protein-coding genes
 #'
-#' Filters a DGE table to retain only rows whose \code{Gene.Name} corresponds
+#' Filters a DGE table to retain only rows whose \code{Gene.Symbol} corresponds
 #' to protein-coding genes for the specified taxonomy ID.
 #'
 #' Helper function (not for users)
 #' 
 #' @param taxonID Integer NCBI taxonomy ID passed to \code{get_protCodingGenes()}.
 #' @param dge_data Data frame of differential expression results with a
-#'   \code{Gene.Name} column.
+#'   \code{Gene.Symbol} column.
 #'
 #' @return A filtered DGE data frame containing only protein-coding genes.
 #' @noRd
 keep_protCoding_dgeData <- function(taxonID, dge_data){
   
   protein_coding_genes <- get_protCodingGenes(taxonID)
-  dge_data <- dge_data %>% filter(Gene.Name %in% protein_coding_genes)
+  dge_data <- dge_data %>% filter(Gene.Symbol %in% protein_coding_genes)
   
   return(dge_data)
   

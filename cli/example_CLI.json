@@ -1,0 +1,21 @@
+{
+  "species": "human",
+  "dge_file_path": "sample_data/NEPC_sample_data_DGE.Rds",
+  "normGeneExp_file_path": "sample_data/NEPC_sample_data_geneExp.Rds",
+  "treatment": "Tumor",
+  "control": "Normal",
+  "loose_criteria": "adj.P.Val",
+  "loose_cutoff": 0.05,
+  "logFC_cutoff": 0,
+  "ig_method": "IG",
+  "B": 300,
+  "ig_cutoff": "all_mean",
+  "ig_custom_cutoff": null,
+  "corr_method": "pearson",
+  "centrality_list": "betweenness,eigenvector",
+  "cutoff": "mean",
+  "run_modules": true,
+  "seed": 123,
+  "outdir": "dice_cli_output",
+  "job_name": "DiCE_CLI_Run"
+}

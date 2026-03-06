@@ -4,13 +4,12 @@
 #' STRING v12 interactions and identifies community modules via the Louvain
 #' algorithm.
 #'
-#' @param dice_genes_df Data frame containing only DiCE genes with a
-#'   \code{Gene.Name} column.
+#' @param gene_list Character vector of genes to retain in the networks.
 #' @param species Character string indicating the organism
-#'   (\code{"human"} or \code{"mouse"}), used to load STRING reference files.
+#'   (\code{"human"} or \code{"mouse"}), used to load STRING reference files. Default = "human".
 #' @param seed Integer seed for reproducible community detection. Default is 123.
 #'
-#' @return A list containing:
+#' @return A list with:
 #'   \itemize{
 #'     \item \code{summary_df}: Summary of number of modules and modularity
 #'     \item \code{membership_df}: Module assignments and within-module degrees
@@ -21,7 +20,7 @@
 #' \dontrun{
 #' # Run module detection on DiCE genes
 #' modules <- detect_DiCE_PPI_unweightedModules(
-#'     dice_genes_df = dice_genes_df,
+#'     gene_list = my_genes,
 #'     species = "human",
 #'     seed = 123
 #' )
@@ -30,32 +29,31 @@
 #' head(modules$membership_df)
 #' }
 #' @export
-detect_DiCE_PPI_unweightedModules <- function(dice_genes_df, 
-                                              species,
-                                              seed = 123)
+detect_PPI_unweightedModules <- function(gene_list = list(), 
+                                         species = "human",
+                                         seed = 123)
 {
   RNGkind(kind = "Mersenne-Twister", normal.kind = "Inversion", sample.kind = "Rejection")
   set.seed(seed)
   
+  if (length(gene_list) == 0){
+    stop("Missing gene list!")
+  }
+  
   # String db downloaded files
-  if(species == "human"){
-    string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
-    #string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
-    #string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
-  }else if(species == "mouse"){
-    string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
-    #string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
-    #string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
+  if(tolower(species) == "human"){
+    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
+    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
+  }else if(tolower(species) == "mouse"){
+    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
+    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
+  }else{
+    stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }
   
   
-  dice_genes <- dice_genes_df$Gene.Name
-  
-  
   # Read Protein information data
-  ppi_info_df <- read.delim(gzfile(string_protInfo_file),
+  ppi_info_df <- read.delim(string_protInfo_file,
                             sep = "\t",
                             quote = "",
                             header = TRUE,
@@ -63,12 +61,12 @@ detect_DiCE_PPI_unweightedModules <- function(dice_genes_df,
   
   # Map STRING IDs to gene symbols
   colnames(ppi_info_df)[1] <- "STRING_id"
-  colnames(ppi_info_df)[2] <- "Gene.Name"
-  mapped_proteins <- ppi_info_df[, c("STRING_id", "Gene.Name")]
-  colnames(mapped_proteins) <- c("STRING_id", "Gene.Name")
+  colnames(ppi_info_df)[2] <- "Gene.Symbol"
+  mapped_proteins <- ppi_info_df[, c("STRING_id", "Gene.Symbol")]
+  colnames(mapped_proteins) <- c("STRING_id", "Gene.Symbol")
   
   # Take protein information of phase2 proteins
-  mapped_proteins <- mapped_proteins %>% filter(Gene.Name %in% dice_genes)
+  mapped_proteins <- mapped_proteins %>% filter(Gene.Symbol %in% gene_list)
   
   # Read STRING PPI file
   ppi_df <- read.table(string_ppi_file,
@@ -86,7 +84,7 @@ detect_DiCE_PPI_unweightedModules <- function(dice_genes_df,
   ppi_df <- ppi_df %>% filter(combined_score >= 400)
   
   # Map gene symbols -> STRING IDs
-  string_ids <- mapped_proteins$STRING_id[mapped_proteins$Gene.Name %in% dice_genes]
+  string_ids <- mapped_proteins$STRING_id[mapped_proteins$Gene.Symbol %in% gene_list]
   
   # Filter PPI file: keep only rows where both proteins are in your list
   interactions <- subset(ppi_df,
@@ -110,8 +108,8 @@ detect_DiCE_PPI_unweightedModules <- function(dice_genes_df,
     merge(mapped_proteins, by.x = "p1", by.y = "STRING_id") %>%
     merge(mapped_proteins, by.x = "p2", by.y = "STRING_id") 
   
-  colnames(interactions)[colnames(interactions) == "Gene.Name.x"] <- "Gene1"
-  colnames(interactions)[colnames(interactions) == "Gene.Name.y"] <- "Gene2"
+  colnames(interactions)[colnames(interactions) == "Gene.Symbol.x"] <- "Gene1"
+  colnames(interactions)[colnames(interactions) == "Gene.Symbol.y"] <- "Gene2"
   
   interactions_unweighted <- interactions[,c("Gene1","Gene2")]
   

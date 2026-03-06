@@ -69,8 +69,8 @@ source("DiCE/protein_coding_filter.R")
 source("DiCE/unweighted_module_analysis.R")
 source("DiCE/weighted_module_analysis_helpers.R")
 source("DiCE/weighted_module_analysis.R")
-source("DiCE/zinbWaVE_denoising.R")
-source("DiCE/newWave_denoising.R")
+# source("DiCE/zinbWaVE_denoising.R")
+# source("DiCE/newWave_denoising.R")
 
 # Source UI pieces
 source("ui_home.R")
@@ -854,7 +854,12 @@ server <- function(input, output, session) {
   
   observeEvent(input$expr_file, {
     req(input$expr_file)
+    req(input$expr_file$datapath)
+    req(nzchar(input$expr_file$datapath))
+    
     path <- input$expr_file$datapath
+    req(file.exists(path))
+    
     expr_path(path)
     
     ext <- tolower(tools::file_ext(input$expr_file$name))
@@ -1276,6 +1281,8 @@ server <- function(input, output, session) {
       
       sample_expr <- "sample_data/sample_Human_data_geneExp.csv"
       sample_dge  <- "sample_data/sample_Human_data_DGE.csv"
+      
+      req(file.exists(sample_expr), file.exists(sample_dge))
       
       expr_path(sample_expr)
       dge_path(sample_dge)

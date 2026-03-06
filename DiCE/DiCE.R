@@ -176,6 +176,8 @@ perform_DiCE <- function(
   }else{
     stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }
+  
+  print("read")
 
   ############################### Load data #############################################
   

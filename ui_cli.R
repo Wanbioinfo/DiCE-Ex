@@ -296,8 +296,8 @@ cli_tab <- function() {
         paste0(
           '{
             "species": "human",
-            "dge_file_path": "sample_data/NEPC_sample_data_DGE.Rds",
-            "normGeneExp_file_path": "sample_data/NEPC_sample_data_geneExp.Rds",
+            "dge_file_path": "sample_data/sample_Human_data_DGE.Rds",
+            "normGeneExp_file_path": "sample_data/sample_Human_data_geneExp.Rds",
             "treatment": "Tumor",
             "control": "Normal",
             "loose_criteria": "adj.P.Val",

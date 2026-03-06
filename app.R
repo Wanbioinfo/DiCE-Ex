@@ -69,8 +69,8 @@ source("DiCE/protein_coding_filter.R")
 source("DiCE/unweighted_module_analysis.R")
 source("DiCE/weighted_module_analysis_helpers.R")
 source("DiCE/weighted_module_analysis.R")
-# source("DiCE/zinbWaVE_denoising.R")
-# source("DiCE/newWave_denoising.R")
+source("DiCE/zinbWaVE_denoising.R")
+source("DiCE/newWave_denoising.R")
 
 # Source UI pieces
 source("ui_home.R")

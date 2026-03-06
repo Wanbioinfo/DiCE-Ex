@@ -149,16 +149,30 @@ perform_DiCE <- function(
   }
 
   # String db downloaded files
-  if(tolower(species) == "human"){
-    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
-    tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_human.xlsx", package = "DiCE")
+  # if(tolower(species) == "human"){
+  #   string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
+  #   string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
+  #   tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_human.xlsx", package = "DiCE")
+  #   taxonID <- 9606
+  # }else if(tolower(species) == "mouse"){
+  #   string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
+  #   string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
+  #   tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_mouse.xlsx", package = "DiCE")
+  #   taxonID = 10090
+  # }else{
+  #   stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
+  # }
+  
+  if (tolower(species) == "human") {
+    string_protInfo_file <- file.path("extdata", "stringDB_v12", "human", "9606.protein.info.v12.0.txt")
+    string_ppi_file      <- file.path("extdata", "stringDB_v12", "human", "9606.protein.links.v12.0.txt")
+    tf_file              <- file.path("extdata", "TFs", "uniprotkb_keyword_KW_0805_AND_organism_human.xlsx")
     taxonID <- 9606
-  }else if(tolower(species) == "mouse"){
-    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
-    tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_mouse.xlsx", package = "DiCE")
-    taxonID = 10090
+  } else if (tolower(species) == "mouse") {
+    string_protInfo_file <- file.path("extdata", "stringDB_v12", "mouse", "10090.protein.info.v12.0.txt")
+    string_ppi_file      <- file.path("extdata", "stringDB_v12", "mouse", "10090.protein.links.v12.0.txt")
+    tf_file              <- file.path("extdata", "TFs", "uniprotkb_keyword_KW_0805_AND_organism_mouse.xlsx")
+    taxonID <- 10090
   }else{
     stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }

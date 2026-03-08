@@ -153,7 +153,7 @@ friendly_dice_error <- function(err_msg) {
       grepl("object.*Gene\\.Name.*not found", raw, ignore.case = TRUE)) {
     hint <- paste(
       "Your file does not contain the expected gene identifier column.",
-      "Please ensure the DGE file includes a gene column (e.g., Gene.Name / Gene / SYMBOL),",
+      "Please ensure the DGE file includes a gene column (e.g., Gene.Name / Gene / SYMBOL / Gene.Symbol.),",
       "and the expression matrix has genes as columns with sample class label in the last column."
     )
   }
@@ -508,7 +508,7 @@ ui <- function(request) {
 server <- function(input, output, session) {
   
   # Clean up old jobs once per session start
-  cleanup_jobs(keep_days = 1)
+  cleanup_jobs(keep_days = 5)
   
   is_phase_message <- function(x) {
     is.character(x) && length(x) == 1 && grepl("^#Genes in Phase", x)
@@ -574,6 +574,34 @@ server <- function(input, output, session) {
     )
   })
   
+  output$job_status_ui <- renderUI({
+    jid <- job_id_qs()
+    st  <- job_status()
+    
+    if (!is.null(jid) && is.null(st)) {
+      return(
+        div(
+          class = "phase-summary",
+          style = "border-left:5px solid #dc3545; background:#fff5f5;",
+          tags$p(tags$b("This saved job is no longer available.")),
+          tags$p("The job may have expired or been removed from server storage.")
+        )
+      )
+    }
+    
+    if (is.null(st)) return(NULL)
+    
+    msg <- st$message
+    show_msg <- is.character(msg) && length(msg) == 1 && !is.na(msg) && nzchar(msg) && !is_phase_message(msg)
+    
+    div(
+      class = "phase-summary",
+      tags$p(paste("Job:", st$job_id %||% "")),
+      tags$p(paste("Status:", st$state %||% "unknown")),
+      if (show_msg) tags$p(msg)
+    )
+  })
+  
   output$dge_loaded_badge <- renderUI({
     req(dge_df())
     tags$div(
@@ -603,6 +631,8 @@ server <- function(input, output, session) {
   dice_result   <- reactiveVal(NULL)
   phase_lines   <- reactiveVal(character(0))
   job_title_val <- reactiveVal(NULL)
+  job_species_val <- reactiveVal(NULL)
+  loaded_job_id   <- reactiveVal(NULL)
   
   modules_summary    <- reactiveVal(NULL)
   modules_membership <- reactiveVal(NULL)
@@ -715,7 +745,7 @@ server <- function(input, output, session) {
       ),
       tags$li(
         tags$b("DGE file: "),
-        "Must contain a valid gene identifier column (e.g., Gene or Gene.Name), ",
+        "Must contain a valid gene identifier column (e.g., Gene or Gene.Name or Gene.Symbol.), ",
         "logFC, p-value, and adjusted p-value."
       ),
       tags$li(
@@ -784,10 +814,12 @@ server <- function(input, output, session) {
   
   loaded_once <- reactiveVal(FALSE)
   
-  observeEvent(job_status(), {
+  observeEvent(list(job_status(), job_id_qs()), {
     st  <- job_status()
     jid <- job_id_qs()
     if (is.null(st) || is.null(jid)) return()
+    
+    updateNavbarPage(session, "main_nav", "results")
     
     if (!is.null(st$job_title) &&
         is.character(st$job_title) &&
@@ -797,50 +829,43 @@ server <- function(input, output, session) {
       job_title_val(st$job_title)
     }
     
-    updateNavbarPage(session, "main_nav", "results")
-  
-    # Load outputs once when finished
-    if (identical(st$state, "finished") && !isTRUE(loaded_once())) {
+    if (identical(st$state, "finished") && !identical(loaded_job_id(), jid)) {
       jd <- job_dir(jid)
       
       f1 <- file.path(jd, "dice_result.rds")
-      if (nzchar(f1) && file.exists(f1))
-        dice_result(readRDS(f1))
+      if (file.exists(f1)) dice_result(readRDS(f1))
       
       f2 <- file.path(jd, "modules_summary.rds")
-      if (nzchar(f2) && file.exists(f2))
-        modules_summary(readRDS(f2))
+      if (file.exists(f2)) modules_summary(readRDS(f2))
       
       f3 <- file.path(jd, "modules_membership.rds")
-      if (nzchar(f3) && file.exists(f3))
-        modules_membership(readRDS(f3))
+      if (file.exists(f3)) modules_membership(readRDS(f3))
       
       f4 <- file.path(jd, "modules_edges.rds")
-      if (nzchar(f4) && file.exists(f4))
-        modules_edges(readRDS(f4))
-
+      if (file.exists(f4)) modules_edges(readRDS(f4))
+      
       f5 <- file.path(jd, "expr_input.rds")
-      if (nzchar(f5) && file.exists(f5))
-        expr_df(readRDS(f5))
+      if (file.exists(f5)) expr_df(readRDS(f5))
       
       f6 <- file.path(jd, "dge_input.rds")
-      if (nzchar(f6) && file.exists(f6))
-        dge_df(readRDS(f6))
+      if (file.exists(f6)) dge_df(readRDS(f6))
       
-      
-      log_file <- file.path(jd, "log.txt")
-      if (nzchar(log_file) && file.exists(log_file)) {
-        log_lines <- tryCatch(readLines(log_file, warn = FALSE), error = function(e) character(0))
-        if (length(log_lines) > 0) {
-          phase_lines(grep("Genes in Phase", log_lines, value = TRUE))
-          dice_log("")
-          add_log("----- Loaded saved job log -----")
-          add_log(log_lines)
+      pf <- file.path(jd, "params.json")
+      if (file.exists(pf)) {
+        p <- jsonlite::read_json(pf, simplifyVector = TRUE)
+        if (!is.null(p$species) && nzchar(p$species)) {
+          job_species_val(tolower(p$species))
         }
       }
       
-      loaded_once(TRUE)
-      add_log("Loaded finished results from bookmarked job link.")
+      log_file <- file.path(jd, "log.txt")
+      if (file.exists(log_file)) {
+        log_lines <- tryCatch(readLines(log_file, warn = FALSE), error = function(e) character(0))
+        phase_lines(grep("Genes in Phase", log_lines, value = TRUE))
+        dice_log(paste(log_lines, collapse = "\n"))
+      }
+      
+      loaded_job_id(jid)
     }
   }, ignoreInit = FALSE)
   
@@ -980,9 +1005,10 @@ server <- function(input, output, session) {
     
     if (nzchar(q)) {
       gene_col <- dplyr::case_when(
-        "Gene.Name" %in% names(df) ~ "Gene.Name",
-        "Gene"      %in% names(df) ~ "Gene",
-        "gene"      %in% names(df) ~ "gene",
+        "Gene.Symbol" %in% names(df) ~ "Gene.Symbol",
+        "Gene.Name"   %in% names(df) ~ "Gene.Name",
+        "Gene"        %in% names(df) ~ "Gene",
+        "gene"        %in% names(df) ~ "gene",
         TRUE ~ NA_character_
       )
       if (!is.na(gene_col)) {
@@ -991,7 +1017,8 @@ server <- function(input, output, session) {
       }
     }
     # Now add hyperlinks
-    df <- add_ncbi_gene_links(df, species = tolower(input$species))
+    species_used <- job_species_val() %||% tolower(input$species %||% "human")
+    df <- add_ncbi_gene_links(df, species = species_used)
     
     df
   })
@@ -1419,6 +1446,13 @@ server <- function(input, output, session) {
         paste0("top", input$phase4_topK) else input$phase4_dice_cutoff
     )
     
+    jsonlite::write_json(
+      params,
+      path = file.path(jd, "params.json"),
+      auto_unbox = TRUE,
+      pretty = TRUE
+    )
+    
     dge_file  <- dge_path()
     expr_file <- expr_path()
     
@@ -1671,10 +1705,11 @@ server <- function(input, output, session) {
     
     dge <- dge_df()
     gene_col <- dplyr::case_when(
-      "Gene"      %in% names(dge) ~ "Gene",
-      "gene"      %in% names(dge) ~ "gene",
-      "Gene.Name" %in% names(dge) ~ "Gene.Name",
-      TRUE ~ names(dge)[1]
+      "Gene.Symbol" %in% names(df) ~ "Gene.Symbol",
+      "Gene.Name"   %in% names(df) ~ "Gene.Name",
+      "Gene"        %in% names(df) ~ "Gene",
+      "gene"        %in% names(df) ~ "gene",
+      TRUE ~ NA_character_
     )
     row <- dge[dge[[gene_col]] == g, , drop = FALSE]
     

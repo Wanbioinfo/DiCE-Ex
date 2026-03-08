@@ -41,14 +41,18 @@ detect_PPI_unweightedModules <- function(gene_list = list(),
   }
   
   # String db downloaded files
-  if(tolower(species) == "human"){
-    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
-  }else if(tolower(species) == "mouse"){
-    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
-  }else{
-    stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
+  if(species == "human"){
+    string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
+    string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
+    #    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
+    #    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
+    taxonID <- 9606
+  }else if(species == "mouse"){
+    string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
+    string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
+    #    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
+    #    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
+    taxonID = 10090
   }
   
   

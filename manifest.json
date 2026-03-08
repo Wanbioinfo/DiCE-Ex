@@ -1585,31 +1585,32 @@
       "description": {
         "Package": "fs",
         "Title": "Cross-Platform File System Operations Based on 'libuv'",
-        "Version": "1.6.6",
-        "Authors@R": "c(\n    person(\"Jim\", \"Hester\", role = \"aut\"),\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = \"aut\"),\n    person(\"Gábor\", \"Csárdi\", , \"csardi.gabor@gmail.com\", role = c(\"aut\", \"cre\")),\n    person(\"libuv project contributors\", role = \"cph\",\n           comment = \"libuv library\"),\n    person(\"Joyent, Inc. and other Node contributors\", role = \"cph\",\n           comment = \"libuv library\"),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"))\n  )",
+        "Version": "1.6.7",
+        "Authors@R": "c(\n    person(\"Jim\", \"Hester\", role = \"aut\"),\n    person(\"Hadley\", \"Wickham\", role = \"aut\"),\n    person(\"Gábor\", \"Csárdi\", role = \"aut\"),\n    person(\"Jeroen\", \"Ooms\", , \"jeroenooms@gmail.com\", role = \"cre\"),\n    person(\"libuv project contributors\", role = \"cph\",\n           comment = \"libuv library\"),\n    person(\"Joyent, Inc. and other Node contributors\", role = \"cph\",\n           comment = \"libuv library\"),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\"))\n  )",
         "Description": "A cross-platform interface to file system operations, built\n    on top of the 'libuv' C library.",
         "License": "MIT + file LICENSE",
         "URL": "https://fs.r-lib.org, https://github.com/r-lib/fs",
         "BugReports": "https://github.com/r-lib/fs/issues",
-        "Depends": "R (>= 3.6)",
+        "Depends": "R (>= 4.1)",
         "Imports": "methods",
         "Suggests": "covr, crayon, knitr, pillar (>= 1.0.0), rmarkdown, spelling,\ntestthat (>= 3.0.0), tibble (>= 1.1.0), vctrs (>= 0.3.0), withr",
         "VignetteBuilder": "knitr",
         "ByteCompile": "true",
         "Config/Needs/website": "tidyverse/tidytemplate",
         "Config/testthat/edition": "3",
+        "Config/usethis/last-upkeep": "2025-04-23",
         "Copyright": "file COPYRIGHTS",
         "Encoding": "UTF-8",
         "Language": "en-US",
-        "RoxygenNote": "7.2.3",
+        "RoxygenNote": "7.3.3",
         "SystemRequirements": "GNU make",
         "NeedsCompilation": "yes",
-        "Packaged": "2025-04-12 09:39:13 UTC; gaborcsardi",
-        "Author": "Jim Hester [aut],\n  Hadley Wickham [aut],\n  Gábor Csárdi [aut, cre],\n  libuv project contributors [cph] (libuv library),\n  Joyent, Inc. and other Node contributors [cph] (libuv library),\n  Posit Software, PBC [cph, fnd]",
-        "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
+        "Packaged": "2026-03-05 19:41:13 UTC; jeroen",
+        "Author": "Jim Hester [aut],\n  Hadley Wickham [aut],\n  Gábor Csárdi [aut],\n  Jeroen Ooms [cre],\n  libuv project contributors [cph] (libuv library),\n  Joyent, Inc. and other Node contributors [cph] (libuv library),\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
+        "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
         "Repository": "CRAN",
-        "Date/Publication": "2025-04-12 10:40:02 UTC",
-        "Built": "R 4.5.0; aarch64-apple-darwin20; 2025-04-12 11:59:24 UTC; unix",
+        "Date/Publication": "2026-03-06 09:00:03 UTC",
+        "Built": "R 4.5.2; aarch64-apple-darwin20; 2026-03-06 09:27:40 UTC; unix",
         "Archs": "fs.so.dSYM"
       }
     },
@@ -1670,6 +1671,38 @@
         "Repository": "CRAN",
         "Date/Publication": "2025-05-09 23:50:06 UTC",
         "Built": "R 4.5.0; ; 2025-05-10 00:42:34 UTC; unix"
+      }
+    },
+    "getopt": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Encoding": "UTF-8",
+        "Package": "getopt",
+        "Type": "Package",
+        "Title": "C-Like 'getopt' Behavior",
+        "Version": "1.20.4",
+        "Authors@R": "c(person(\"Trevor L\", \"Davis\", role=c(\"aut\", \"cre\"),\n             email=\"trevor.l.davis@gmail.com\",\n             comment = c(ORCID = \"0000-0001-6341-4639\")),\n    person(\"Allen\", \"Day\", role=\"aut\", comment=\"Original package author\"),\n    person(\"Roman\", \"Zenka\", role=\"ctb\"))",
+        "URL": "https://github.com/trevorld/r-getopt",
+        "Imports": "stats",
+        "BugReports": "https://github.com/trevorld/r-getopt/issues",
+        "Description": "Package designed to be used with Rscript to write\n    '#!' shebang scripts that accept short and long flags/options.\n    Many users will prefer using instead the packages optparse or argparse\n    which add extra features like automatically generated help option and usage,\n    support for default values, positional argument support, etc.",
+        "License": "GPL (>= 2)",
+        "Suggests": "testthat",
+        "RoxygenNote": "7.2.3",
+        "Config/testthat/edition": "3",
+        "NeedsCompilation": "no",
+        "Packaged": "2023-10-01 05:01:35 UTC; trevorld",
+        "Author": "Trevor L Davis [aut, cre] (<https://orcid.org/0000-0001-6341-4639>),\n  Allen Day [aut] (Original package author),\n  Roman Zenka [ctb]",
+        "Maintainer": "Trevor L Davis <trevor.l.davis@gmail.com>",
+        "Repository": "CRAN",
+        "Date/Publication": "2023-10-01 06:30:01 UTC",
+        "Built": "R 4.5.0; ; 2025-04-01 01:37:17 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "getopt",
+        "RemoteRef": "getopt",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.20.4"
       }
     },
     "ggplot2": {
@@ -1835,7 +1868,7 @@
         "Package": "highr",
         "Type": "Package",
         "Title": "Syntax Highlighting for R Source Code",
-        "Version": "0.11",
+        "Version": "0.12",
         "Authors@R": "c(\n    person(\"Yihui\", \"Xie\", role = c(\"aut\", \"cre\"), email = \"xie@yihui.name\", comment = c(ORCID = \"0000-0003-0645-5666\")),\n    person(\"Yixuan\", \"Qiu\", role = \"aut\"),\n    person(\"Christopher\", \"Gandrud\", role = \"ctb\"),\n    person(\"Qiang\", \"Li\", role = \"ctb\")\n    )",
         "Description": "Provides syntax highlighting for R source code. Currently it\n    supports LaTeX and HTML output. Source code of other languages is supported\n    via Andre Simon's highlight package (<https://gitlab.com/saalen/highlight>).",
         "Depends": "R (>= 3.3.0)",
@@ -1846,14 +1879,14 @@
         "BugReports": "https://github.com/yihui/highr/issues",
         "VignetteBuilder": "knitr",
         "Encoding": "UTF-8",
-        "RoxygenNote": "7.3.1",
+        "RoxygenNote": "7.3.3",
         "NeedsCompilation": "no",
-        "Packaged": "2024-05-26 19:27:21 UTC; yihui",
-        "Author": "Yihui Xie [aut, cre] (<https://orcid.org/0000-0003-0645-5666>),\n  Yixuan Qiu [aut],\n  Christopher Gandrud [ctb],\n  Qiang Li [ctb]",
+        "Packaged": "2026-03-05 19:48:41 UTC; yihui",
+        "Author": "Yihui Xie [aut, cre] (ORCID: <https://orcid.org/0000-0003-0645-5666>),\n  Yixuan Qiu [aut],\n  Christopher Gandrud [ctb],\n  Qiang Li [ctb]",
         "Maintainer": "Yihui Xie <xie@yihui.name>",
         "Repository": "CRAN",
-        "Date/Publication": "2024-05-26 20:00:03 UTC",
-        "Built": "R 4.5.0; ; 2025-04-01 06:32:49 UTC; unix"
+        "Date/Publication": "2026-03-06 06:30:47 UTC",
+        "Built": "R 4.5.2; ; 2026-03-06 09:27:47 UTC; unix"
       }
     },
     "hms": {
@@ -2380,6 +2413,34 @@
         "Archs": "magrittr.so.dSYM"
       }
     },
+    "matrixStats": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "matrixStats",
+        "Version": "1.5.0",
+        "Depends": "R (>= 3.4.0)",
+        "Suggests": "utils, base64enc, ggplot2, knitr, markdown, microbenchmark,\nR.devices, R.rsp",
+        "VignetteBuilder": "R.rsp",
+        "Title": "Functions that Apply to Rows and Columns of Matrices (and to\nVectors)",
+        "Authors@R": "c(\n  person(\"Henrik\", \"Bengtsson\", role=c(\"aut\", \"cre\", \"cph\"),\n                                 email=\"henrikb@braju.com\"),\n  person(\"Constantin\", \"Ahlmann-Eltze\", role = \"ctb\"),\n  person(\"Hector\", \"Corrada Bravo\", role=\"ctb\"),\n  person(\"Robert\", \"Gentleman\", role=\"ctb\"),\n  person(\"Jan\", \"Gleixner\", role=\"ctb\"),\n  person(\"Peter\", \"Hickey\", role=\"ctb\"),\n  person(\"Ola\", \"Hossjer\", role=\"ctb\"),\n  person(\"Harris\", \"Jaffee\", role=\"ctb\"),\n  person(\"Dongcan\", \"Jiang\", role=\"ctb\"),\n  person(\"Peter\", \"Langfelder\", role=\"ctb\"),\n  person(\"Brian\", \"Montgomery\", role=\"ctb\"),\n  person(\"Angelina\", \"Panagopoulou\", role=\"ctb\"),\n  person(\"Hugh\", \"Parsonage\", role=\"ctb\"),\n  person(\"Jakob Peder\", \"Pettersen\", role=\"ctb\"))",
+        "Author": "Henrik Bengtsson [aut, cre, cph],\n  Constantin Ahlmann-Eltze [ctb],\n  Hector Corrada Bravo [ctb],\n  Robert Gentleman [ctb],\n  Jan Gleixner [ctb],\n  Peter Hickey [ctb],\n  Ola Hossjer [ctb],\n  Harris Jaffee [ctb],\n  Dongcan Jiang [ctb],\n  Peter Langfelder [ctb],\n  Brian Montgomery [ctb],\n  Angelina Panagopoulou [ctb],\n  Hugh Parsonage [ctb],\n  Jakob Peder Pettersen [ctb]",
+        "Maintainer": "Henrik Bengtsson <henrikb@braju.com>",
+        "Description": "High-performing functions operating on rows and columns of matrices, e.g. col / rowMedians(), col / rowRanks(), and col / rowSds().  Functions optimized per data type and for subsetted calculations such that both memory usage and processing time is minimized.  There are also optimized vector-based methods, e.g. binMeans(), madDiff() and weightedMedian().",
+        "License": "Artistic-2.0",
+        "LazyLoad": "TRUE",
+        "NeedsCompilation": "yes",
+        "ByteCompile": "TRUE",
+        "URL": "https://github.com/HenrikBengtsson/matrixStats",
+        "BugReports": "https://github.com/HenrikBengtsson/matrixStats/issues",
+        "RoxygenNote": "7.3.2",
+        "Packaged": "2025-01-07 17:25:20 UTC; henrik",
+        "Repository": "CRAN",
+        "Date/Publication": "2025-01-07 19:50:02 UTC",
+        "Built": "R 4.5.0; aarch64-apple-darwin20; 2025-03-31 21:46:24 UTC; unix",
+        "Archs": "matrixStats.so.dSYM"
+      }
+    },
     "memoise": {
       "Source": "CRAN",
       "Repository": "https://cran.rstudio.com",
@@ -2497,6 +2558,41 @@
         "RemoteRef": "openxlsx",
         "RemoteRepos": "https://cran.rstudio.com",
         "RemoteSha": "4.2.8.1"
+      }
+    },
+    "optparse": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Encoding": "UTF-8",
+        "Package": "optparse",
+        "Type": "Package",
+        "Title": "Command Line Option Parser",
+        "Version": "1.7.5",
+        "Authors@R": "c(person(\"Trevor L.\", \"Davis\", role=c(\"aut\", \"cre\"),\n             email=\"trevor.l.davis@gmail.com\",\n             comment = c(ORCID = \"0000-0001-6341-4639\")),\n    person(\"Allen\", \"Day\", role=\"ctb\", comment=\"Some documentation and examples ported from the getopt package.\"),\n    person(\"Python Software Foundation\", role=\"ctb\", comment=\"Some documentation from the optparse Python module.\"),\n    person(\"Steve\", \"Lianoglou\", role=\"ctb\"),\n    person(\"Jim\", \"Nikelski\", role=\"ctb\"),\n    person(\"Kirill\", \"Müller\", role=\"ctb\"),\n    person(\"Peter\", \"Humburg\", role=\"ctb\"), \n    person(\"Rich\", \"FitzJohn\", role=\"ctb\"),\n    person(\"Gyu Jin\", \"Choi\", role=\"ctb\"))",
+        "Description": "A command line parser inspired by Python's 'optparse' library to\n    be used with Rscript to write \"#!\" shebang scripts that accept short and\n    long flag/options.",
+        "License": "GPL (>= 2)",
+        "Copyright": "See file (inst/)COPYRIGHTS.",
+        "URL": "https://github.com/trevorld/r-optparse",
+        "BugReports": "https://github.com/trevorld/r-optparse/issues",
+        "LazyLoad": "yes",
+        "Depends": "R (>= 3.6.0)",
+        "Imports": "methods, getopt (>= 1.20.2)",
+        "Suggests": "knitr (>= 1.15.19), stringr, testthat",
+        "VignetteBuilder": "knitr",
+        "RoxygenNote": "7.3.1",
+        "NeedsCompilation": "no",
+        "Packaged": "2024-04-16 00:25:36 UTC; trevorld",
+        "Author": "Trevor L. Davis [aut, cre] (<https://orcid.org/0000-0001-6341-4639>),\n  Allen Day [ctb] (Some documentation and examples ported from the getopt\n    package.),\n  Python Software Foundation [ctb] (Some documentation from the optparse\n    Python module.),\n  Steve Lianoglou [ctb],\n  Jim Nikelski [ctb],\n  Kirill Müller [ctb],\n  Peter Humburg [ctb],\n  Rich FitzJohn [ctb],\n  Gyu Jin Choi [ctb]",
+        "Maintainer": "Trevor L. Davis <trevor.l.davis@gmail.com>",
+        "Repository": "CRAN",
+        "Date/Publication": "2024-04-16 20:00:06 UTC",
+        "Built": "R 4.5.0; ; 2025-04-01 09:02:50 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "optparse",
+        "RemoteRef": "optparse",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemoteSha": "1.7.5"
       }
     },
     "org.Hs.eg.db": {
@@ -3999,25 +4095,127 @@
   },
   "files": {
     "app.R": {
-      "checksum": "d2bed0a4fe63b876b4ec954b8a2e407c"
+      "checksum": "060a3c1a09c473baa6e8a7a744a9d19d"
+    },
+    "cli/DiCE_CLI.R": {
+      "checksum": "6b0822502ac09641b8c6babb5c9ca9a0"
+    },
+    "cli/example_CLI.json": {
+      "checksum": "cd2671defe21417534be3c1221d7ae79"
+    },
+    "DiCE/annotate_TFs.R": {
+      "checksum": "c8d74fd215c8517f13c3f0f30a4946b5"
+    },
+    "DiCE/calculate_NetCentralities.R": {
+      "checksum": "6558a9924728f879802633dd7bbb7baf"
+    },
+    "DiCE/calculate_weightedIG.R": {
+      "checksum": "4f9d8adac52527e3ccbb4e6aca97ec3c"
+    },
+    "DiCE/corr_calculations.R": {
+      "checksum": "279035463688f68f8b60350e593827cf"
+    },
+    "DiCE/createFinalRanking.R": {
+      "checksum": "649d749f0d404eb6f6b0e66dc1c51a24"
+    },
+    "DiCE/createPPI.R": {
+      "checksum": "38e083532fee4ece9655d03b3e5e0f25"
+    },
+    "DiCE/DiCE.R": {
+      "checksum": "8bc00e42ffe83882f8fb107fe28c56f9"
+    },
+    "DiCE/fileReader.R": {
+      "checksum": "9279a9ae6d2ab744048b3e3cdd7b95d9"
+    },
+    "DiCE/network_analysis.R": {
+      "checksum": "e3f1f81021f4264e675de13595f14f79"
+    },
+    "DiCE/normalize_df_cols.R": {
+      "checksum": "6749e9fc22c935100f3072a0b9bec42b"
+    },
+    "DiCE/Phase_1.R": {
+      "checksum": "7d45b0cc638158f6bfc77ea947c1ea5c"
+    },
+    "DiCE/Phase_2.R": {
+      "checksum": "8f9ed01ac340c9df047d5f9cc4c362da"
+    },
+    "DiCE/Phase_3.R": {
+      "checksum": "9754de6ea6cc29d0a653db710ab51738"
+    },
+    "DiCE/Phase_4.R": {
+      "checksum": "c4138d8efe7aec0c6998bb7655dae8bc"
+    },
+    "DiCE/protein_coding_filter.R": {
+      "checksum": "d1e8169d7f0ae8bd874db64e850f2a9f"
+    },
+    "DiCE/unweighted_module_analysis.R": {
+      "checksum": "dd086978e394d7c7b809788430cea1b1"
+    },
+    "DiCE/weighted_module_analysis_helpers.R": {
+      "checksum": "205cd13fad1226c74499120dffc93df2"
+    },
+    "DiCE/weighted_module_analysis.R": {
+      "checksum": "bc2302b5b470c63c559a5d032335278b"
+    },
+    "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt": {
+      "checksum": "8be60606c43cfca37de883131425ca9e"
+    },
+    "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz": {
+      "checksum": "d99ba61443344f59e73f45eeedbcd172"
+    },
+    "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt": {
+      "checksum": "27877b5d2edba5077e4aa694bbf83643"
+    },
+    "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz": {
+      "checksum": "5f86c664ded81b88143b29ee5a823045"
+    },
+    "README.md": {
+      "checksum": "20e8023d6eb3c008c1631a8728d8d4ef"
+    },
+    "run_dice_backend.R": {
+      "checksum": "7a86d41fe5357f73d10778acd7f96e8d"
+    },
+    "sample_data/sample_Human_data_DGE.csv": {
+      "checksum": "58f1c9de7dabf41767d023b9ad74f8dc"
+    },
+    "sample_data/sample_Human_data_DGE.Rds": {
+      "checksum": "65a0096f1bb9521d59c8339b16b91196"
+    },
+    "sample_data/sample_Human_data_geneExp.csv": {
+      "checksum": "f0cca3fd2046792bbc30659b8013bc09"
+    },
+    "sample_data/sample_Human_data_geneExp.Rds": {
+      "checksum": "b58fcd04c87c3331634c4eb5b095d296"
+    },
+    "sample_data/sample_Mouse_data_DGE.csv": {
+      "checksum": "d91c2293d2391a81b5a60bf92c7ae519"
+    },
+    "sample_data/sample_Mouse_data_DGE.Rds": {
+      "checksum": "64ad0d55fdec5c4f069eee265f9bdd3a"
+    },
+    "sample_data/sample_Mouse_data_geneExp.csv": {
+      "checksum": "2e8c5bd4474463c9363ac240c6b6daa4"
+    },
+    "sample_data/sample_Mouse_data_geneExp.Rds": {
+      "checksum": "730599802600a9d2d099d439976f90b3"
     },
     "ui_about.R": {
       "checksum": "8a31bc86dc013f6e02d418c94d7cba10"
     },
     "ui_cli.R": {
-      "checksum": "7454c35f68ce97f3a0e7bac5f38e31df"
+      "checksum": "efdec9fafce90f6b90f5b82b18e58746"
     },
     "ui_home.R": {
       "checksum": "2f9fc96646d1a79b3902b9f8ce962043"
     },
+    "ui_results.R": {
+      "checksum": "99276e29e0a07fcf9397c14898c9e03d"
+    },
     "ui_run.R": {
       "checksum": "f0bf12ddbb027c9c6e59cdd348dc85a0"
     },
-    "www/.DS_Store": {
-      "checksum": "bd1b7ae1a1900185e37f9bc535268388"
-    },
-    "www/images/.DS_Store": {
-      "checksum": "194577a7e20bdcc7afbb718f502c134c"
+    "ui_team.R": {
+      "checksum": "c68533e9c550136bd7463bb634e80058"
     },
     "www/images/dge_image.png": {
       "checksum": "09ee61e6e2965ba6ddcc3c8d6f16a06a"

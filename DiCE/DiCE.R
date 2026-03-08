@@ -75,11 +75,6 @@
 #' @importFrom utils stack combn read.csv read.delim read.table
 #' @importFrom parallel mclapply
 #' @importFrom NetWeaver ensemble_rank
-#' @importFrom zinbwave zinbwave
-#' @importFrom SingleCellExperiment SingleCellExperiment
-#' @importFrom NewWave newWave
-#' @importFrom scuttle logNormCounts
-#' @importFrom SummarizedExperiment assay SummarizedExperiment
 #' @importFrom stats cor quantile median as.formula setNames sd
 #' @importFrom BiocParallel register MulticoreParam
 #' @importFrom readxl read_excel
@@ -149,35 +144,20 @@ perform_DiCE <- function(
   }
 
   # String db downloaded files
-  # if(tolower(species) == "human"){
-  #   string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-  #   string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
-  #   tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_human.xlsx", package = "DiCE")
-  #   taxonID <- 9606
-  # }else if(tolower(species) == "mouse"){
-  #   string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-  #   string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
-  #   tf_file <- system.file("extdata/TFs/uniprotkb_keyword_KW_0805_AND_organism_mouse.xlsx", package = "DiCE")
-  #   taxonID = 10090
-  # }else{
-  #   stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
-  # }
-  
-  
-  if (tolower(species) == "human") {
+  if(species == "human"){
+    string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
+    string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
+    #    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
+    #    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
     taxonID <- 9606
-    string_protInfo_file <- file.path("extdata","stringDB_v12","human","9606.protein.info.v12.0.txt")
-    string_ppi_file <- file.path("extdata","stringDB_v12","human","9606.protein.links.v12.0.txt.gz")
-
-  } else if (tolower(species) == "mouse") {
-    string_protInfo_file <- file.path("extdata","stringDB_v12","mouse","10090.protein.info.v12.0.txt")
-    string_ppi_file <- file.path("extdata","stringDB_v12","mouse","10090.protein.links.v12.0.txt.gz")
-    taxonID <- 10090
-  }else{
-    stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
+  }else if(species == "mouse"){
+    string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
+    string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
+    #    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
+    #    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
+    taxonID = 10090
   }
   
-  print("read")
 
   ############################### Load data #############################################
   
@@ -188,45 +168,13 @@ perform_DiCE <- function(
     stop("Invalid or missing 'dge_file_path'")
   }
   
-  dge_data <- read_any(dge_file_path)
-  
-  if (data_type == "scRNA-seq") {
-    
-    # read raw read counts
-    if (is.null(rawGeneExp_file_path) || !file.exists(rawGeneExp_file_path)) {
-      stop("Invalid or missing 'rawGeneExp_file_path' for scRNA-seq data.")
-    }
-    
-    rawGeneExp_data <- read_any(rawGeneExp_file_path)
-    
-    # read normalized 
-    if (tolower(ig_method) %in% c("ig", "wig")) {
-      
-      if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
-        stop("Invalid or missing 'normGeneExp_file_path' when ig_method is 'ig' or 'wig'.")
-      }
-      
-      normGeneExp_data <- read_any(normGeneExp_file_path)
-      
-    }
-    
-    if (corr_mode != "ZINB-WaVE"){
-      if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
-        stop("Invalid or missing 'normGeneExp_file_path' when ig_method is 'ig' or 'wig'.")
-      }
-      
-      normGeneExp_data <- read_any(normGeneExp_file_path)
-    }
-    
-  } else if (data_type == "bulkRNA-seq") {
-    if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
-      stop("Invalid or missing 'normGeneExp_file_path'.")
-    }
-    normGeneExp_data <- read_any(normGeneExp_file_path)
-    
-  } else {
-    stop("Invalid value for 'data_type'. Select from 'bulkRNA-seq' or 'scRNA-seq'.")
+  if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
+    stop("Invalid or missing 'normGeneExp_file_path'")
   }
+  
+  dge_data <- read_any(dge_file_path)
+  normGeneExp_data <- read_any(normGeneExp_file_path)
+  
   
   # Change column names to DiCE col names
   dge_data <- normalize_dge_cols(dge_data)
@@ -344,12 +292,7 @@ perform_DiCE <- function(
                                                       mapped_proteins)
   }
   
-  if (corr_mode == "ZINB-WaVE"){
-    print("Raw gene expression - ZINB-WaVE")
-    filtered_denoised_geneExp <- newWave_model(raw_geneExp = filtered_raw_geneExp, 
-                                               K = newwave_K)
-    geneExp_to_corr <- filtered_denoised_geneExp
-  }else if ((corr_mode == "directCorr") | (corr_method == "remove_Zerocells")){
+  if ((corr_mode == "directCorr") | (corr_method == "remove_Zerocells")){
     print("Normalized gene expressions")
     geneExp_to_corr <- filtered_normGeneExp_data
   }else{

@@ -148,7 +148,7 @@ detect_PPI_unweightedModules <- function(gene_list = list(),
   )
   
   membership_df <- data.frame(
-    Gene   = names(memb),
+    Gene.Symbol   = names(memb),
     Module = as.integer(memb),
     stringsAsFactors = FALSE
   )

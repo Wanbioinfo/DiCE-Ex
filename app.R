@@ -848,7 +848,15 @@ server <- function(input, output, session) {
       if (file.exists(f5)) expr_df(readRDS(f5))
       
       f6 <- file.path(jd, "dge_input.rds")
-      if (file.exists(f6)) dge_df(readRDS(f6))
+      if (file.exists(f6)) {
+        dge_saved <- readRDS(f6)
+        dge_saved <- as.data.frame(dge_saved)
+        dge_saved <- normalize_dge_cols(dge_saved)
+        dge_df(dge_saved)
+      
+        # overwrite old saved file so future loads are already fixed
+        saveRDS(dge_saved, f6)
+      }
       
       pf <- file.path(jd, "params.json")
       if (file.exists(pf)) {
@@ -883,10 +891,6 @@ server <- function(input, output, session) {
     path <- input$expr_file$datapath
     req(file.exists(path))
     
-    expr_path(path)
-    
-    print(path)
-    
     ext <- tolower(tools::file_ext(input$expr_file$name))
     expr_tbl <- switch(
       ext,
@@ -908,7 +912,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$dge_file, {
     req(input$dge_file)
-    req(input$dge_file)
     req(input$dge_file$datapath)
     req(nzchar(input$dge_file$datapath))
     
@@ -917,14 +920,12 @@ server <- function(input, output, session) {
     
     dge_path(path)
     
-    print(path)
-    
     ext <- tolower(tools::file_ext(input$dge_file$name))
     dge_tbl <- switch(
       ext,
       "csv"  = readr::read_csv(path, show_col_types = FALSE),
-      "tsv"  = readr::read_tsv(path,  show_col_types = FALSE),
-      "txt"  = readr::read_tsv(path,  show_col_types = FALSE),
+      "tsv"  = readr::read_tsv(path, show_col_types = FALSE),
+      "txt"  = readr::read_tsv(path, show_col_types = FALSE),
       "xls"  = readxl::read_excel(path),
       "xlsx" = readxl::read_excel(path),
       "rds"  = {
@@ -935,7 +936,10 @@ server <- function(input, output, session) {
       },
       readr::read_delim(path, delim = NULL, show_col_types = FALSE)
     )
-    dge_df(as.data.frame(dge_tbl))
+    
+    dge_tbl <- as.data.frame(dge_tbl)
+    dge_tbl <- normalize_dge_cols(dge_tbl)
+    dge_df(dge_tbl)
   })
   
   ################################
@@ -1006,6 +1010,7 @@ server <- function(input, output, session) {
     if (nzchar(q)) {
       gene_col <- dplyr::case_when(
         "Gene.Symbol" %in% names(df) ~ "Gene.Symbol",
+        "Gene.symbol" %in% names(df) ~ "Gene.symbol",
         "Gene.Name"   %in% names(df) ~ "Gene.Name",
         "Gene"        %in% names(df) ~ "Gene",
         "gene"        %in% names(df) ~ "gene",
@@ -1222,9 +1227,17 @@ server <- function(input, output, session) {
     )
     edges_df <- data.frame(from = edges$Gene1, to = edges$Gene2, stringsAsFactors = FALSE)
     
-    if (nrow(nodes_df) == 0 || nrow(edges_df) == 0) {
+    nodes_df <- nodes_df[!is.na(nodes_df$id) & nzchar(nodes_df$id), , drop = FALSE]
+    edges_df <- edges_df[
+      !is.na(edges_df$from) & nzchar(edges_df$from) &
+        !is.na(edges_df$to) & nzchar(edges_df$to),
+      , drop = FALSE
+    ]
+    
+    if (nrow(nodes_df) <= 1 || nrow(edges_df) == 0) {
       return(visNetwork(data.frame(), data.frame()) %>% visOptions(nodesIdSelection = FALSE))
     }
+
     
     highlight_gene <- selected_gene_id()
     
@@ -1317,7 +1330,10 @@ server <- function(input, output, session) {
       dge_path(sample_dge)
       
       expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
-      dge_df(vroom::vroom(sample_dge, show_col_types = FALSE))
+      dge_tbl <- vroom::vroom(sample_dge, show_col_types = FALSE)
+      dge_tbl <- as.data.frame(dge_tbl)
+      dge_tbl <- normalize_dge_cols(dge_tbl)
+      dge_df(dge_tbl)
       
       session$sendCustomMessage(
         "loadFiles",
@@ -1354,7 +1370,11 @@ server <- function(input, output, session) {
       dge_path(sample_dge)
       
       expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
-      dge_df(vroom::vroom(sample_dge, show_col_types = FALSE))
+      
+      dge_tbl <- vroom::vroom(sample_dge, show_col_types = FALSE)
+      dge_tbl <- as.data.frame(dge_tbl)
+      dge_tbl <- normalize_dge_cols(dge_tbl)
+      dge_df(dge_tbl)
       
       session$sendCustomMessage(
         "loadFiles",
@@ -1537,9 +1557,7 @@ server <- function(input, output, session) {
             
             dice_genes_df <- result_df[result_df[[phase_col]] == "DiCE", , drop = FALSE]
             if (nrow(dice_genes_df) == 0) stop("No rows with Phase == 'DiCE' found; cannot run module detection.")
-            
-            print(class(dice_genes_df))
-            print(colnames(dice_genes_df))
+          
             dice_genes <- dice_genes_df$Gene.Symbol
             
             modules <- detect_PPI_unweightedModules(
@@ -1675,26 +1693,70 @@ server <- function(input, output, session) {
   ## 15. Gene click -> boxplot
   ################################
   observeEvent(input$ppi_clicked_gene, {
-    req(expr_df(), dge_df())
+    g <- input$ppi_clicked_gene
+    if (is.null(g) || !nzchar(g)) return()
     
-    g   <- input$ppi_clicked_gene
     dat <- expr_df()
+    dge <- dge_df()
+    
+    if (is.null(dat) || !is.data.frame(dat) || nrow(dat) == 0 || ncol(dat) < 2) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("Expression data are not available for this bookmarked job.")
+      ))
+      return()
+    }
+    
+    if (is.null(dge) || !is.data.frame(dge) || nrow(dge) == 0) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("Differential expression data are not available for this bookmarked job.")
+      ))
+      return()
+    }
+    
     cond_col <- names(dat)[ncol(dat)]
+    if (is.null(cond_col) || !nzchar(cond_col)) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("Could not identify the condition/class column in the expression matrix.")
+      ))
+      return()
+    }
     
     if (!(g %in% names(dat))) {
       showModal(modalDialog(
         title = paste("Gene:", g),
         easyClose = TRUE,
         footer = modalButton("Close"),
-        tags$em("This gene is not present as a column in the uploaded expression matrix.")
+        tags$em("This gene is not present as a column in the saved expression matrix.")
       ))
       return()
     }
     
     df_long <- data.frame(
-      Condition  = dat[[cond_col]],
-      Expression = dat[[g]]
+      Condition = dat[[cond_col]],
+      Expression = dat[[g]],
+      stringsAsFactors = FALSE
     )
+    
+    df_long <- df_long[!is.na(df_long$Expression), , drop = FALSE]
+    
+    if (nrow(df_long) == 0) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("No expression values available for this gene.")
+      ))
+      return()
+    }
     
     p <- ggplot2::ggplot(df_long, ggplot2::aes(x = Condition, y = Expression, fill = Condition)) +
       ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
@@ -1703,32 +1765,39 @@ server <- function(input, output, session) {
       ggplot2::theme_minimal(base_size = 14) +
       ggplot2::theme(legend.position = "none")
     
-    dge <- dge_df()
     gene_col <- dplyr::case_when(
-      "Gene.Symbol" %in% names(df) ~ "Gene.Symbol",
-      "Gene.Name"   %in% names(df) ~ "Gene.Name",
-      "Gene"        %in% names(df) ~ "Gene",
-      "gene"        %in% names(df) ~ "gene",
+      "Gene.Symbol" %in% names(dge) ~ "Gene.Symbol",
+      "Gene.symbol" %in% names(dge) ~ "Gene.symbol",
+      "Gene.Name"   %in% names(dge) ~ "Gene.Name",
+      "Gene"        %in% names(dge) ~ "Gene",
+      "gene"        %in% names(dge) ~ "gene",
       TRUE ~ NA_character_
     )
-    row <- dge[dge[[gene_col]] == g, , drop = FALSE]
     
-    if (nrow(row) == 0) {
-      stats_html <- tags$em("No DGE statistics found for this gene.")
+    if (is.na(gene_col)) {
+      stats_html <- tags$em("No recognizable gene column found in the saved DGE table.")
     } else {
-      logFC <- if ("logFC"     %in% names(row)) signif(row$logFC[1], 4)     else NA
-      pval  <- if ("P.Value"   %in% names(row)) signif(row$P.Value[1], 4)   else NA
-      padj  <- if ("adj.P.Val" %in% names(row)) signif(row$adj.P.Val[1], 4) else NA
+      row <- dge[as.character(dge[[gene_col]]) == g, , drop = FALSE]
       
-      stats_html <- tags$div(
-        tags$h4("Differential Expression Statistics"),
-        tags$p(HTML(paste0(
-          "<b>logFC:</b> ", logFC, "<br>",
-          "<b>P-value:</b> ", pval, "<br>",
-          "<b>adj.P.Val:</b> ", padj
-        )))
-      )
+      if (nrow(row) == 0) {
+        stats_html <- tags$em("No DGE statistics found for this gene.")
+      } else {
+        logFC <- if ("logFC" %in% names(row)) signif(row$logFC[1], 4) else NA
+        pval  <- if ("P.Value" %in% names(row)) signif(row$P.Value[1], 4) else if ("pvalue" %in% names(row)) signif(row$pvalue[1], 4) else NA
+        padj  <- if ("adj.P.Val" %in% names(row)) signif(row$adj.P.Val[1], 4) else if ("adjp" %in% names(row)) signif(row$adjp[1], 4) else NA
+        
+        stats_html <- tags$div(
+          tags$h4("Differential Expression Statistics"),
+          tags$p(HTML(paste0(
+            "<b>logFC:</b> ", logFC, "<br>",
+            "<b>P-value:</b> ", pval, "<br>",
+            "<b>adj.P.Val:</b> ", padj
+          )))
+        )
+      }
     }
+    
+    output$popup_gene_plot <- renderPlot({ p })
     
     showModal(modalDialog(
       title = paste("Gene:", g),
@@ -1742,8 +1811,6 @@ server <- function(input, output, session) {
       br(),
       stats_html
     ))
-    
-    output$popup_gene_plot <- renderPlot({ p })
   })
 }
 

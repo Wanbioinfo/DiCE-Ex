@@ -24,14 +24,7 @@ team_tab <- function() {
       p("Indiana University School of Medicine, Indianapolis, IN 46202, United States"),
       p(tags$b("Email:"), " sliu19@iu.edu"),
       br(),
-      
-      # --- Elnaz Pashaei ---
-      h4("Dr. Elnaz Pashaei"),
-      p(tags$b("Postdoctoral Researcher")),
-      p("Department of Medical and Molecular Genetics,"),
-      p("Indiana University School of Medicine, Indianapolis, IN 46202, United States"),
-      p(tags$b("Email:"), " epashaei@iu.edu"),
-      br(),
+
       
       # --- Jun Wan ---
       h4("Dr. Jun Wan"),

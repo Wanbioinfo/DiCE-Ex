@@ -153,7 +153,7 @@ friendly_dice_error <- function(err_msg) {
       grepl("object.*Gene\\.Name.*not found", raw, ignore.case = TRUE)) {
     hint <- paste(
       "Your file does not contain the expected gene identifier column.",
-      "Please ensure the DGE file includes a gene column (e.g., Gene.Name / Gene / SYMBOL / Gene.Symbol.),",
+      "Please ensure the differential gene expression analysis file includes a gene column (e.g., Gene.Name / Gene / SYMBOL / Gene.Symbol.),",
       "and the expression matrix has genes as columns with sample class label in the last column."
     )
   }
@@ -606,7 +606,7 @@ server <- function(input, output, session) {
     req(dge_df())
     tags$div(
       style="margin-top:6px; color:#198754; font-size:13px;",
-      icon("check-circle"), " Sample DGE data loaded"
+      icon("check-circle"), " Sample differential expression analysis data loaded"
     )
   })
   
@@ -744,13 +744,13 @@ server <- function(input, output, session) {
         "Do not place sample names as the first column."
       ),
       tags$li(
-        tags$b("DGE file: "),
+        tags$b("Differential gene expression analysis file: "),
         "Must contain a valid gene identifier column (e.g., Gene or Gene.Name or Gene.Symbol.), ",
         "logFC, p-value, and adjusted p-value."
       ),
       tags$li(
         tags$b("Gene identifiers: "),
-        "Must match between expression and DGE files."
+        "Must match between expression and Differential gene expression analysis files."
       ),
       tags$li(
         tags$b("Group labels: "),
@@ -931,7 +931,7 @@ server <- function(input, output, session) {
       "rds"  = {
         obj <- readRDS(path)
         if (is.matrix(obj)) obj <- as.data.frame(obj)
-        if (!is.data.frame(obj)) stop("DGE RDS must contain a data frame or matrix.")
+        if (!is.data.frame(obj)) stop("Differential gene expression analysis RDS must contain a data frame or matrix.")
         obj
       },
       readr::read_delim(path, delim = NULL, show_col_types = FALSE)
@@ -1346,7 +1346,7 @@ server <- function(input, output, session) {
       showModal(modalDialog(
         title = "Human sample data loaded",
         HTML(paste0(
-          "Human sample expression and DGE files have been loaded successfully.<br><br>",
+          "Human sample expression and Differential expression analysis files have been loaded successfully.<br><br>",
           "<b>Job title:</b> Human_DiCE_test<br>",
           "<b>Treatment:</b> Tumor<br>",
           "<b>Control:</b> Normal<br>",
@@ -1387,7 +1387,7 @@ server <- function(input, output, session) {
       showModal(modalDialog(
         title = "Mouse sample data loaded",
         HTML(paste0(
-          "Mouse sample expression and DGE files have been loaded successfully.<br><br>",
+          "Mouse sample expression and differential expression analysis files have been loaded successfully.<br><br>",
           "<b>Job title:</b> Mouse_DiCE_test<br>",
           "<b>Treatment:</b> POR<br>",
           "<b>Control:</b> WT<br>",
@@ -1668,7 +1668,7 @@ server <- function(input, output, session) {
           tags$p(tags$b("Please verify the following before retrying:")),
           tags$ul(
             tags$li("Expression matrix: Genes should be provided as columns, samples as rows, and the class/phenotype label must be included in the last column. Sample names should not be placed in the first column."),
-            tags$li("DGE file: must include gene name, logFC, p-value, and adjusted p-value."),
+            tags$li("Differential gene expression analysis file: must include gene name, logFC, p-value, and adjusted p-value."),
             tags$li("Treatment and control labels must exactly match values in the class column (case-sensitive).")
           ),
           
@@ -1775,12 +1775,12 @@ server <- function(input, output, session) {
     )
     
     if (is.na(gene_col)) {
-      stats_html <- tags$em("No recognizable gene column found in the saved DGE table.")
+      stats_html <- tags$em("No recognizable gene column found in the saved differential gene expression analysis table.")
     } else {
       row <- dge[as.character(dge[[gene_col]]) == g, , drop = FALSE]
       
       if (nrow(row) == 0) {
-        stats_html <- tags$em("No DGE statistics found for this gene.")
+        stats_html <- tags$em("No differential gene expression analysis statistics found for this gene.")
       } else {
         logFC <- if ("logFC" %in% names(row)) signif(row$logFC[1], 4) else NA
         pval  <- if ("P.Value" %in% names(row)) signif(row$P.Value[1], 4) else if ("pvalue" %in% names(row)) signif(row$pvalue[1], 4) else NA

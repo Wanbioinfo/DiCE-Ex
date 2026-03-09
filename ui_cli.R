@@ -90,7 +90,7 @@ cli_tab <- function() {
       # Inputs format
       tags$h3("Input file formats"),
       
-      tags$h4("1) DGE file (required)"),
+      tags$h4("1) Differential gene expression analysis file (required)"),
       tags$ul(
         style = "font-size:15px; line-height:1.7;",
         tags$li("Supported: .csv / .tsv / .xlsx / .rds"),

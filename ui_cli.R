@@ -59,7 +59,8 @@ cli_tab <- function() {
           'praznik',
           'reticulate',
           'openxlsx',
-          'readxl'
+          'readxl',
+          'Hmisc'
         ))"
       ),
       
@@ -236,19 +237,32 @@ cli_tab <- function() {
           ),
           
           tags$tr(
-            tags$td("min_passCount"),
-            tags$td("Minimum number of selected centrality metrics a gene must pass to be retained as a DiCE gene."),
-            tags$td("Integer"),
-            tags$td("length(centrality_list)")
+            tags$td("dice_rules"),
+            tags$td("A list of DiCE selection rules used to classify genes as final DiCE genes after ensemble ranking. Each rule can be created using helper functions such as dice_centrality_rule() or dice_ensemble_rule()."),
+            tags$td("List"),
+            tags$td(
+              HTML("list(<br/>
+               &nbsp;&nbsp;dice_centrality_rule(<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;metric = \"betweenness\",<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;threshold_type = \"percent\",<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;threshold = 25<br/>
+               &nbsp;&nbsp;),<br/>
+               &nbsp;&nbsp;dice_centrality_rule(<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;metric = \"eigen vector\",<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;threshold_type = \"percent\",<br/>
+               &nbsp;&nbsp;&nbsp;&nbsp;threshold = 25<br/>
+               &nbsp;&nbsp;)<br/>
+               )")
+            )
           ),
           
           tags$tr(
-            tags$td("cutoff"),
-            tags$td("Threshold rule for centrality-based DiCE filtering."),
-            tags$td("'mean', 'median', 'top10', 'top25', etc."),
-            tags$td("mean")
+            tags$td("dice_logic"),
+            tags$td("Character string specifying how multiple dice_rules are combined to determine final DiCE genes."),
+            tags$td("Character"),
+            tags$td("AND")
           ),
-          
+
           tags$tr(
             tags$td("run_modules"),
             tags$td("Whether to run unweighted PPI module detection after DiCE ranking."),
@@ -309,11 +323,24 @@ cli_tab <- function() {
             "ig_custom_cutoff": null,
             "corr_method": "pearson",
             "centrality_list": "betweenness,eigenvector",
-            "cutoff": "mean",
+            "dice_rules": [
+              {
+                "type": "centrality",
+                "metric": "betweenness",
+                "threshold_type": "percent",
+                "threshold": 25
+              },
+              {
+                "type": "ensemble",
+                "threshold_type": "rank",
+                "threshold": 200
+              }
+            ],
+            "dice_logic": "OR",
             "run_modules": true,
             "seed": 123,
-            "outdir": "dice_example_cli_output",
-            "job_name": "DiCE_Example_CLI_Run"
+            "outdir": "dice_cli_output",
+            "job_name": "DiCE_CLI_Run"
           }'
 
         )

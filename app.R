@@ -49,20 +49,21 @@ library("org.Hs.eg.db")
 library("AnnotationDbi")
 library("org.Mm.eg.db")
 library("readxl")
+library('Hmisc')
 
 source("DiCE/calculate_NetCentralities.R")
 source("DiCE/calculate_weightedIG.R")
 source("DiCE/corr_calculations.R")
-source("DiCE/createFinalRanking.R")
+source("DiCE/ensemble_Ranking.R")
 source("DiCE/createPPI.R")
 source("DiCE/DiCE.R")
 source("DiCE/fileReader.R")
-source("DiCE/network_analysis.R")
 source("DiCE/normalize_df_cols.R")
 source("DiCE/Phase_1.R")
 source("DiCE/Phase_2.R")
 source("DiCE/Phase_3.R")
 source("DiCE/Phase_4.R")
+source("DiCE/Phase_5.R")
 source("DiCE/protein_coding_filter.R")
 source("DiCE/unweighted_module_analysis.R")
 source("DiCE/weighted_module_analysis_helpers.R")
@@ -81,6 +82,16 @@ source("ui_team.R")
 ################################
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0 || is.na(x)) y else x
 
+safe_input <- function(x, default = NULL) {
+  if (is.null(x) || length(x) == 0) return(default)
+  
+  if (length(x) == 1) {
+    if (is.na(x)) return(default)
+    if (is.character(x) && !nzchar(trimws(x))) return(default)
+  }
+  
+  x
+}
 
 jobs_root <- "jobs"
 dir.create(jobs_root, showWarnings = FALSE, recursive = TRUE)
@@ -365,7 +376,162 @@ ui <- function(request) {
         margin: 0;
       }
 
-
+      .page-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 25px 30px 60px 30px;
+      }
+  
+      .hero-box {
+        background: linear-gradient(135deg, #f7f9fc 0%, #eef4fb 100%);
+        border: 1px solid #dbe6f3;
+        border-radius: 18px;
+        padding: 28px 30px;
+        margin-bottom: 28px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+      }
+  
+      .hero-title {
+        font-size: 32px;
+        font-weight: 700;
+        color: #1f3556;
+        margin-bottom: 10px;
+      }
+  
+      .hero-subtext {
+        font-size: 17px;
+        line-height: 1.7;
+        color: #3b4c63;
+        margin-bottom: 0;
+      }
+  
+      .info-card {
+        background: #ffffff;
+        border: 1px solid #e4e9f0;
+        border-radius: 16px;
+        padding: 22px 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.04);
+      }
+  
+      .section-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: #213a5b;
+        margin-top: 0;
+        margin-bottom: 12px;
+      }
+  
+      .subsection-title {
+        font-size: 21px;
+        font-weight: 650;
+        color: #29476d;
+        margin-top: 16px;
+        margin-bottom: 10px;
+      }
+  
+      .phase-box {
+        background: #fbfcfe;
+        border-left: 5px solid #4c78a8;
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin-bottom: 20px;
+      }
+  
+      .phase-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #29476d;
+        margin-bottom: 8px;
+      }
+  
+      .soft-note {
+        background: #f8fbff;
+        border: 1px solid #d8e7f6;
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin: 12px 0 18px 0;
+        color: #35506d;
+      }
+  
+      .mini-card {
+        background: #f9fbfd;
+        border: 1px solid #e3ebf3;
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 18px;
+        height: 100%;
+      }
+  
+      .mini-card h5 {
+        margin-top: 0;
+        font-weight: 700;
+        color: #28476b;
+      }
+  
+      .doc-img {
+        width: 100%;
+        max-width: 1000px;
+        margin-top: 12px;
+        border: 1px solid #d8dee8;
+        border-radius: 10px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+      }
+  
+      .doc-img-sm {
+        width: 100%;
+        max-width: 520px;
+        margin-top: 12px;
+        border: 1px solid #d8dee8;
+        border-radius: 10px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+      }
+  
+      .caption {
+        font-size: 0.92em;
+        color: #5a6675;
+        margin-top: 8px;
+      }
+  
+      .btn-doc {
+        background-color: #2f6fb2;
+        border-color: #2f6fb2;
+        color: white !important;
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-weight: 600;
+        text-decoration: none !important;
+        display: inline-block;
+        margin-top: 10px;
+      }
+  
+      .btn-doc:hover {
+        background-color: #24598f;
+        border-color: #24598f;
+        color: white !important;
+      }
+  
+      .about-table th {
+        background: #f3f7fb;
+        color: #233b59;
+      }
+  
+      .about-table td, .about-table th {
+        vertical-align: top !important;
+        padding: 10px 12px !important;
+      }
+    
+      .toc-box {
+        background: #ffffff;
+        border: 1px solid #e4e9f0;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 24px;
+      }
+  
+      .toc-box ul {
+        margin-bottom: 0;
+      }
 
       .navbar .container,
       .navbar .container-fluid {
@@ -574,6 +740,125 @@ server <- function(input, output, session) {
     )
   })
   
+  output$phase5_selected_centralities_ui <- renderUI({
+    cent_labels <- c(
+      betweenness = "Betweenness",
+      eigenvector = "Eigenvector",
+      degree      = "Degree",
+      pagerank    = "PageRank",
+      closeness   = "Closeness",
+      harmonic    = "Harmonic",
+      authority   = "Authority",
+      strength    = "Strength"
+    )
+    
+    if (is.null(input$phase4_cents) || length(input$phase4_cents) == 0) {
+      return(
+        div(
+          style = "
+          border:1px solid #f0ad4e;
+          background:#fffaf2;
+          border-radius:8px;
+          padding:10px 12px;
+          margin-bottom:12px;
+        ",
+          "No centrality selected in Phase IV."
+        )
+      )
+    }
+    
+    selected_labels <- unname(cent_labels[input$phase4_cents])
+    
+    div(
+      style = "
+      border:1px solid #d9edf7;
+      background:#f7fcff;
+      border-radius:8px;
+      padding:10px 12px;
+      margin-bottom:12px;
+    ",
+      tags$b("Selected centralities from Phase IV: "),
+      paste(selected_labels, collapse = ", ")
+    )
+  })
+  
+  output$phase5_centrality_rules_ui <- renderUI({
+    
+    req(input$phase4_cents)
+    
+    cent_labels <- c(
+      betweenness = "Betweenness",
+      eigenvector = "Eigenvector",
+      degree      = "Degree",
+      pagerank    = "PageRank",
+      closeness   = "Closeness",
+      harmonic    = "Harmonic",
+      authority   = "Authority",
+      strength    = "Strength"
+    )
+    
+    rule_ui_list <- lapply(input$phase4_cents, function(cent) {
+      
+      label <- cent_labels[[cent]]
+      
+      div(
+        style = "
+        border:1px solid #e9ecef;
+        border-radius:8px;
+        padding:12px;
+        margin-bottom:12px;
+        background:#fafafa;
+      ",
+        
+        tags$h5(style = "margin-top:0; color:#004b4b;", label),
+        
+        fluidRow(
+          column(
+            6,
+            selectInput(
+              inputId = paste0("phase5_cutoff_type_", cent),
+              label   = "Cutoff type",
+              choices = c(
+                "Mean"   = "mean",
+                "Top K%" = "percent",
+                "Top K"  = "rank"
+              ),
+              selected = "percent"
+            )
+          ),
+          
+          column(
+            6,
+            conditionalPanel(
+              condition = sprintf("input['phase5_cutoff_type_%s'] == 'percent'", cent),
+              numericInput(
+                inputId = paste0("phase5_cutoff_percent_", cent),
+                label   = "K (%) for top K% cutoff",
+                value   = 25,
+                min     = 1,
+                max     = 100,
+                step    = 1
+              )
+            ),
+            
+            conditionalPanel(
+              condition = sprintf("input['phase5_cutoff_type_%s'] == 'rank'", cent),
+              numericInput(
+                inputId = paste0("phase5_cutoff_rank_", cent),
+                label   = "K for top K cutoff",
+                value   = 200,
+                min     = 1,
+                step    = 1
+              )
+            )
+          )
+        )
+      )
+    })
+    
+    do.call(tagList, rule_ui_list)
+  })
+  
   output$job_status_ui <- renderUI({
     jid <- job_id_qs()
     st  <- job_status()
@@ -637,6 +922,9 @@ server <- function(input, output, session) {
   modules_summary    <- reactiveVal(NULL)
   modules_membership <- reactiveVal(NULL)
   modules_edges      <- reactiveVal(NULL)
+  modules_stats <- reactiveVal(NULL)
+  modules_between_edges <- reactiveVal(NULL)
+  all_module_edges <- reactiveVal(NULL)
   
   ################################
   ## 3b. Download readiness flag  <-- PUT IT HERE
@@ -858,6 +1146,12 @@ server <- function(input, output, session) {
         saveRDS(dge_saved, f6)
       }
       
+      f7 <- file.path(jd, "module_stats.rds")
+      if (file.exists(f7)) modules_stats(readRDS(f7))
+      
+      f8 <- file.path(jd, "between_module_edges.rds")
+      if (file.exists(f8)) modules_between_edges(readRDS(f8))
+      
       pf <- file.path(jd, "params.json")
       if (file.exists(pf)) {
         p <- jsonlite::read_json(pf, simplifyVector = TRUE)
@@ -865,6 +1159,9 @@ server <- function(input, output, session) {
           job_species_val(tolower(p$species))
         }
       }
+      
+      f9 <- file.path(jd, "all_module_edges.rds")
+      if (file.exists(f9)) all_module_edges(readRDS(f9))
       
       log_file <- file.path(jd, "log.txt")
       if (file.exists(log_file)) {
@@ -1049,6 +1346,56 @@ server <- function(input, output, session) {
     )
   })
   
+  output$modules_stats_table <- DT::renderDT({
+    df <- modules_stats()
+    req(df)
+    if (!is.data.frame(df)) df <- as.data.frame(df)
+    
+    df <- df %>%
+      dplyr::rename(
+        `Number of Nodes` = Num_Nodes,
+        `Number of Edges` = Num_Edges
+      )
+    
+    DT::datatable(
+      df,
+      filter = "none",
+      rownames = FALSE,
+      options = list(
+        dom = "tip",
+        pageLength = 10,
+        autoWidth = TRUE,
+        scrollX = FALSE,
+        columnDefs = list(
+          list(width = "120px", targets = 0),
+          list(width = "120px", targets = 1),
+          list(width = "120px", targets = 2)
+        )
+      )
+    )
+  })
+  
+  output$modules_between_edges_table <- DT::renderDT({
+    df <- modules_between_edges()
+    req(df)
+    if (!is.data.frame(df)) df <- as.data.frame(df)
+    
+    df <- df %>%
+      dplyr::rename(
+        A = Module_A,
+        B = Module_B,
+        `edge_count (inter M)` = Num_Edges
+      )
+    
+    DT::datatable(
+      df,
+      filter = "none",
+      rownames = FALSE,
+      options = list(scrollX = TRUE, pageLength = 10, dom = "lrtip")
+    )
+  })
+  
+  
   ################################
   ## 9. Module tables
   ################################
@@ -1076,7 +1423,7 @@ server <- function(input, output, session) {
     if (!is.data.frame(df)) df <- as.data.frame(df)
     
     if (!is.null(input$mm_module_filter) && input$mm_module_filter != "all") {
-      df <- df[df$Module == as.numeric(input$mm_module_filter), , drop = FALSE]
+      df <- df[df$Module == input$mm_module_filter, , drop = FALSE]
     }
     
     q <- input$mm_gene_search
@@ -1138,14 +1485,30 @@ server <- function(input, output, session) {
       paste0("DiCE_modules_", job, "_", format(Sys.time(), "%Y%m%d-%H%M%S"), ".xlsx")
     },
     content = function(file) {
-      s <- modules_summary()
-      m <- modules_membership()
-      req(s, m)
+      s  <- modules_summary()
+      ms <- modules_stats()
+      be <- modules_between_edges()
+      m  <- modules_membership()
+      ae <- all_module_edges()
+      req(s, ms, be, m, ae)
+      
       wb <- openxlsx::createWorkbook()
+      
       openxlsx::addWorksheet(wb, "Module summary")
       openxlsx::writeData(wb, "Module summary", as.data.frame(s))
+      
+      openxlsx::addWorksheet(wb, "Module statistics")
+      openxlsx::writeData(wb, "Module statistics", as.data.frame(ms))
+      
+      openxlsx::addWorksheet(wb, "Between-module edges")
+      openxlsx::writeData(wb, "Between-module edges", as.data.frame(be))
+      
       openxlsx::addWorksheet(wb, "Module membership")
       openxlsx::writeData(wb, "Module membership", as.data.frame(m))
+      
+      openxlsx::addWorksheet(wb, "All edges")
+      openxlsx::writeData(wb, "All edges", as.data.frame(ae))
+      
       openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
     }
   )
@@ -1179,7 +1542,7 @@ server <- function(input, output, session) {
   ###########################################
   selected_module_id <- reactive({
     if (is.null(input$mm_module_filter) || input$mm_module_filter == "all") return("all")
-    as.numeric(input$mm_module_filter)
+    input$mm_module_filter
   })
   
   selected_gene_id <- reactive({
@@ -1213,19 +1576,105 @@ server <- function(input, output, session) {
     as.data.frame(ed, stringsAsFactors = FALSE)
   })
   
+  output$module_overview_network <- renderVisNetwork({
+    ms <- modules_stats()
+    be <- modules_between_edges()
+    req(ms)
+    
+    if (!is.data.frame(ms)) ms <- as.data.frame(ms)
+    if (!is.null(be) && !is.data.frame(be)) be <- as.data.frame(be)
+    
+    if (nrow(ms) == 0) {
+      return(visNetwork(data.frame(), data.frame()) %>% visOptions(nodesIdSelection = FALSE))
+    }
+    
+    mod_col   <- if ("Module" %in% names(ms)) "Module" else names(ms)[1]
+    nodes_col <- if ("Num_Nodes" %in% names(ms)) "Num_Nodes" else names(ms)[2]
+    intra_col <- if ("Num_Edges" %in% names(ms)) "Num_Edges" else names(ms)[3]
+    
+    nodes_df <- data.frame(
+      id    = as.character(ms[[mod_col]]),
+      label = as.character(ms[[mod_col]]),
+      value = as.numeric(ms[[nodes_col]]),
+      title = paste0(
+        "<b>", ms[[mod_col]], "</b><br>",
+        "Number of nodes: ", ms[[nodes_col]], "<br>",
+        "Number of edges: ", ms[[intra_col]]
+      ),
+      stringsAsFactors = FALSE
+    )
+    all_mods <- sort(unique(as.character(modules_membership()$Module)))
+    mod_cols <- grDevices::hcl.colors(length(all_mods), palette = "Set 2")
+    names(mod_cols) <- all_mods
+    
+    if (!is.null(be) && nrow(be) > 0) {
+      modA_col <- if ("Module_A" %in% names(be)) "Module_A" else names(be)[1]
+      modB_col <- if ("Module_B" %in% names(be)) "Module_B" else names(be)[2]
+      be_col   <- if ("Num_Edges" %in% names(be)) "Num_Edges" else names(be)[3]
+      
+      edges_df <- data.frame(
+        from  = as.character(be[[modA_col]]),
+        to    = as.character(be[[modB_col]]),
+        value = as.numeric(be[[be_col]]),
+        title = paste0("Between-module edges: ", be[[be_col]]),
+        stringsAsFactors = FALSE
+      )
+    } else {
+      edges_df <- data.frame(from = character(0), to = character(0), value = numeric(0))
+    }
+    
+    mod_levels <- nodes_df$id
+    pal <- grDevices::hcl.colors(length(mod_levels), "Set 2")
+    names(pal) <- mod_levels
+    
+    nodes_df$color.background <- mod_cols[nodes_df$Module]
+    nodes_df$color.border     <- mod_cols[nodes_df$Module]
+    
+    visNetwork(nodes_df, edges_df, width = "100%", height = "430px") %>%
+      visNodes(
+        shape = "dot",
+        scaling = list(min = 20, max = 70),
+        font = list(size = 24, face = "bold")
+      ) %>%
+      visEdges(
+        smooth = FALSE,
+        scaling = list(min = 1, max = 12)
+      ) %>%
+      visOptions(
+        highlightNearest = list(enabled = TRUE, hover = TRUE),
+        nodesIdSelection = FALSE
+      ) %>%
+      visIgraphLayout(layout = "layout_with_fr") %>%
+      visPhysics(enabled = FALSE)
+  })
+  
   output$ppi_module_network <- renderVisNetwork({
     nodes <- module_nodes()
     edges <- module_edges()
     req(nodes, edges)
     
     nodes_df <- data.frame(
-      id    = nodes$Gene,
-      label = nodes$Gene,
-      title = paste0(nodes$Gene, "<br>Module: ", nodes$Module, "<br>Degree: ", nodes$Degree_inModule),
-      value = nodes$Degree_inModule,
+      id     = nodes$Gene,
+      label  = nodes$Gene,
+      title  = paste0(
+        nodes$Gene,
+        "<br>Module: ", nodes$Module,
+        "<br>Degree: ", nodes$Degree_inModule
+      ),
+      value  = nodes$Degree_inModule,
+      Module = as.character(nodes$Module),
       stringsAsFactors = FALSE
     )
-    edges_df <- data.frame(from = edges$Gene1, to = edges$Gene2, stringsAsFactors = FALSE)
+    
+    all_mods <- sort(unique(as.character(modules_membership()$Module)))
+    mod_cols <- grDevices::hcl.colors(length(all_mods), palette = "Set 2")
+    names(mod_cols) <- all_mods
+    
+    edges_df <- data.frame(
+      from = edges$Gene1,
+      to   = edges$Gene2,
+      stringsAsFactors = FALSE
+    )
     
     nodes_df <- nodes_df[!is.na(nodes_df$id) & nzchar(nodes_df$id), , drop = FALSE]
     edges_df <- edges_df[
@@ -1235,30 +1684,47 @@ server <- function(input, output, session) {
     ]
     
     if (nrow(nodes_df) <= 1 || nrow(edges_df) == 0) {
-      return(visNetwork(data.frame(), data.frame()) %>% visOptions(nodesIdSelection = FALSE))
+      return(
+        visNetwork(data.frame(), data.frame()) %>%
+          visOptions(nodesIdSelection = FALSE)
+      )
     }
-
+    
+    nodes_df$color.background <- mod_cols[nodes_df$Module]
+    nodes_df$color.border     <- mod_cols[nodes_df$Module]
     
     highlight_gene <- selected_gene_id()
     
     if (!is.null(highlight_gene) && nzchar(highlight_gene)) {
       keep_edges <- edges_df$from == highlight_gene | edges_df$to == highlight_gene
       edges_sub  <- edges_df[keep_edges, , drop = FALSE]
+      
       if (nrow(edges_sub) > 0) {
         keep_nodes <- unique(c(edges_sub$from, edges_sub$to))
         nodes_df <- nodes_df[nodes_df$id %in% keep_nodes, , drop = FALSE]
         edges_df <- edges_sub
       }
       
-      nodes_df$color.background <- ifelse(nodes_df$id == highlight_gene, "#e74c3c", "#95a5a6")
-      nodes_df$color.border     <- ifelse(nodes_df$id == highlight_gene, "#c0392b", "#7f8c8d")
+      nodes_df$color.background <- ifelse(
+        nodes_df$id == highlight_gene,
+        "#e74c3c",
+        nodes_df$color.background
+      )
+      nodes_df$color.border <- ifelse(
+        nodes_df$id == highlight_gene,
+        "#c0392b",
+        nodes_df$color.border
+      )
     }
     
     max_nodes <- 200
     if (is.null(highlight_gene) && nrow(nodes_df) > max_nodes) {
       top_ids  <- nodes_df$id[order(-nodes_df$value)][1:max_nodes]
       nodes_df <- nodes_df[nodes_df$id %in% top_ids, , drop = FALSE]
-      edges_df <- edges_df[edges_df$from %in% nodes_df$id & edges_df$to %in% nodes_df$id, , drop = FALSE]
+      edges_df <- edges_df[
+        edges_df$from %in% nodes_df$id & edges_df$to %in% nodes_df$id,
+        , drop = FALSE
+      ]
     }
     
     file_name <- if (!is.null(highlight_gene) && nzchar(highlight_gene)) {
@@ -1267,17 +1733,30 @@ server <- function(input, output, session) {
       paste0("Module_", selected_module_id(), "_network")
     }
     
-    visNetwork(nodes_df, edges_df) %>%
-      visNodes(shape = "dot", size = 32, font = list(size = 28)) %>%
-      visOptions(highlightNearest = FALSE, nodesIdSelection = FALSE) %>%
-      visIgraphLayout(layout = "layout_with_fr") %>%
+    visNetwork(nodes_df, edges_df, width = "100%", height = "780px") %>%
+      visNodes(
+        shape = "dot",
+        size = 32,
+        font = list(size = 28)
+      ) %>%
+      visEdges(
+        smooth = FALSE,
+        color = list(opacity = 0.75)
+      ) %>%
+      visOptions(
+        highlightNearest = FALSE,
+        nodesIdSelection = FALSE
+      ) %>%
+      visIgraphLayout(layout = "layout_with_fr", 
+                      randomSeed = 123,
+                      type = "full") %>%
       visPhysics(enabled = FALSE) %>%
       visEvents(
         selectNode = "function(nodes) {
-          if (nodes.nodes.length > 0) {
-            Shiny.setInputValue('ppi_clicked_gene', nodes.nodes[0], {priority: 'event'});
-          }
-        }",
+        if (nodes.nodes.length > 0) {
+          Shiny.setInputValue('ppi_clicked_gene', nodes.nodes[0], {priority: 'event'});
+        }
+      }",
         afterDrawing = "function() { window.network = this.network; }"
       ) %>%
       visExport(type = "png", name = file_name)
@@ -1321,6 +1800,12 @@ server <- function(input, output, session) {
       updateTextInput(session, "group_control", value = "Normal")
       updateRadioButtons(session, "species", selected = "Human")
       
+      updateCheckboxGroupInput(
+        session,
+        "phase4_cents",
+        selected = c("betweenness", "eigenvector")
+      )
+      
       sample_expr <- "sample_data/sample_Human_data_geneExp.csv"
       sample_dge  <- "sample_data/sample_Human_data_DGE.csv"
       
@@ -1362,6 +1847,12 @@ server <- function(input, output, session) {
       updateTextInput(session, "group_treat",   value = "POR")
       updateTextInput(session, "group_control", value = "WT")
       updateRadioButtons(session, "species", selected = "Mouse")
+      
+      updateCheckboxGroupInput(
+        session,
+        "phase4_cents",
+        selected = c("betweenness", "eigenvector")
+      )
       
       sample_expr <- "sample_data/sample_Mouse_data_geneExp.csv"
       sample_dge  <- "sample_data/sample_Mouse_data_DGE.csv"
@@ -1448,6 +1939,91 @@ server <- function(input, output, session) {
     job_title_val(input$job_title)
     add_log(paste0("Starting DiCE run. Job link: ", link))
     
+    req(input$phase4_cents)
+    shiny::validate(
+      shiny::need(length(input$phase4_cents) > 0, "Please select at least one centrality in Phase IV.")
+    )
+    
+    dice_rules <- list()
+    
+    selection_mode <- input$phase5_selection_mode %||% "both"
+    
+    if (selection_mode %in% c("centrality_only", "both")) {
+      
+      req(input$phase4_cents)
+      shiny::validate(
+        shiny::need(length(input$phase4_cents) > 0,
+                    "Please select at least one centrality in Phase IV.")
+      )
+      
+      centrality_rules <- lapply(input$phase4_cents, function(cent) {
+        
+        cutoff_type <- safe_input(input[[paste0("phase5_cutoff_type_", cent)]], "percent")
+        
+        if (identical(cutoff_type, "mean")) {
+          dice_centrality_rule(
+            metric = cent,
+            threshold_type = "mean"
+          )
+          
+        } else if (identical(cutoff_type, "percent")) {
+          dice_centrality_rule(
+            metric = cent,
+            threshold_type = "percent",
+            threshold = safe_input(input[[paste0("phase5_cutoff_percent_", cent)]], 25)
+          )
+          
+        } else if (identical(cutoff_type, "rank")) {
+          dice_centrality_rule(
+            metric = cent,
+            threshold_type = "rank",
+            threshold = safe_input(input[[paste0("phase5_cutoff_rank_", cent)]], 200)
+          )
+          
+        } else {
+          stop("Invalid Phase V cutoff type for centrality: ", cent)
+        }
+      })
+      
+      dice_rules <- c(dice_rules, centrality_rules)
+    }
+    
+    if (selection_mode %in% c("ensemble_only", "both")) {
+      
+      ensemble_rank_cutoff <- input$phase5_ensemble_rank
+      if (is.null(ensemble_rank_cutoff) || length(ensemble_rank_cutoff) == 0 || is.na(ensemble_rank_cutoff)) {
+        ensemble_rank_cutoff <- 200
+      }
+      
+      dice_rules <- c(
+        dice_rules,
+        list(
+          dice_ensemble_rule(
+            threshold_type = "rank",
+            threshold = ensemble_rank_cutoff
+          )
+        )
+      )
+    }
+    
+    if (isTRUE(input$phase5_use_ensemble_rule)) {
+      
+      ensemble_rank_cutoff <- input$phase5_ensemble_rank
+      if (is.null(ensemble_rank_cutoff) || length(ensemble_rank_cutoff) == 0 || is.na(ensemble_rank_cutoff)) {
+        ensemble_rank_cutoff <- 200
+      }
+      
+      dice_rules <- c(
+        dice_rules,
+        list(
+          dice_ensemble_rule(
+            threshold_type = "rank",
+            threshold = ensemble_rank_cutoff
+          )
+        )
+      )
+    }
+    
     params <- list(
       job_title    = input$job_title,
       species      = tolower(input$species),
@@ -1462,8 +2038,8 @@ server <- function(input, output, session) {
       custom_ig    = input$phase2_custom_ig,
       corr_type    = tolower(input$phase3_corr),
       centralities = input$phase4_cents,
-      dice_cutoff  = if (input$phase4_dice_cutoff == "topK")
-        paste0("top", input$phase4_topK) else input$phase4_dice_cutoff
+      dice_rules   = dice_rules,
+      dice_logic   = input$phase5_dice_logic
     )
     
     jsonlite::write_json(
@@ -1536,9 +2112,10 @@ server <- function(input, output, session) {
               ig_custom_cutoff      = params$custom_ig,
               corr_mode             = "directCorr",
               corr_method           = params$corr_type,
+              corr_pval_cutoff      = 1,
               centrality_list       = params$centralities,
-              min_passCount         = length(params$centralities),
-              cutoff                = params$dice_cutoff
+              dice_rules            = params$dice_rules,
+              dice_logic            = params$dice_logic
             )
             
             
@@ -1608,6 +2185,9 @@ server <- function(input, output, session) {
       saveRDS(modules$summary_df,       file.path(jd, "modules_summary.rds"))
       saveRDS(modules$membership_df,    file.path(jd, "modules_membership.rds"))
       saveRDS(modules$edges_by_module,  file.path(jd, "modules_edges.rds"))
+      saveRDS(modules$module_stats_df,          file.path(jd, "module_stats.rds"))
+      saveRDS(modules$between_module_edges_df,  file.path(jd, "between_module_edges.rds"))
+      saveRDS(modules$all_edges_df, file.path(jd, "all_module_edges.rds"))
       
       write_status(job_id, "finished", "Done.")
       list(job_id = job_id, df = result_df, log = log_vec, modules = modules)
@@ -1630,6 +2210,9 @@ server <- function(input, output, session) {
       modules_summary(modules_obj$summary_df)
       modules_membership(modules_obj$membership_df)
       modules_edges(modules_obj$edges_by_module)
+      modules_stats(modules_obj$module_stats_df)
+      modules_between_edges(modules_obj$between_module_edges_df)
+      all_module_edges(modules_obj$all_edges_df)
       
       current_status("Finished.")
       removeModal()

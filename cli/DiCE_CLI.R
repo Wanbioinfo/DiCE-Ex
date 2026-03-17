@@ -32,6 +32,7 @@ suppressPackageStartupMessages({
   library("AnnotationDbi")
   library("org.Mm.eg.db")
   library("readxl")
+  library('Hmisc')
 })
 
 # ---------- Helpers ----------
@@ -52,6 +53,34 @@ has_file <- function(x) has_value(x) && file.exists(x)
 
 ensure_dir <- function(x) {
   if (!dir.exists(x)) dir.create(x, recursive = TRUE, showWarnings = FALSE)
+}
+
+parse_dice_rules <- function(x) {
+  # NULL -> no rules provided
+  if (is.null(x)) return(NULL)
+  
+  # empty character -> no rules provided
+  if (is.character(x) && length(x) == 1) {
+    if (is.na(x) || !nzchar(trimws(x))) return(NULL)
+    
+    x <- tryCatch(
+      jsonlite::fromJSON(x, simplifyVector = FALSE),
+      error = function(e) die("Failed to parse --dice_rules JSON: ", e$message)
+    )
+  }
+  
+  # if config JSON loaded it as data.frame, convert rows to list of rules
+  if (is.data.frame(x)) {
+    x <- split(x, seq_len(nrow(x)))
+    x <- lapply(x, function(row) as.list(row))
+  }
+  
+  # if it is already a list, keep it
+  if (!is.list(x) || length(x) == 0) {
+    die("dice_rules must be a non-empty list or a valid JSON string.")
+  }
+  
+  x
 }
 
 # Map species input to DiCE expected values
@@ -106,11 +135,13 @@ option_list <- list(
   make_option(c("--centrality_list"), type="character", default="betweenness,eigenvector", dest="centrality_list",
               help="Comma-separated list of centrality metrics"),
   
-  make_option(c("--min_passCount"), type="integer", default=NULL, dest="min_passCount",
-              help="Minimum number of centralities a gene must pass"),
+  make_option(c("--dice_rules"), type = "character",
+    default = '[{"type":"centrality","metric":"betweenness","threshold_type":"percent","threshold":25},{"type":"centrality","metric":"eigen vector","threshold_type":"percent","threshold":25}]',
+    dest = "dice_rules", help = "JSON string of DiCE selection rules [default %default]"
+  ),
   
-  make_option(c("--cutoff"), type="character", default="mean", dest="cutoff",
-              help="Final centrality cutoff [default %default]"),
+  make_option(c("--dice_logic"), type="character", default="AND", dest="dice_logic",
+              help="How to combine dice_rules: AND or OR [default %default]"),
   
   make_option(c("--run_modules"), action="store_true", default=TRUE, dest="run_modules",
               help="Run PPI module detection after DiCE [default TRUE]"),
@@ -133,7 +164,7 @@ opt <- parse_args(OptionParser(option_list=option_list))
 # ---------- Load config JSON if provided ----------
 if (!is.null(opt$config)) {
   if (!file.exists(opt$config)) die("Config not found: ", opt$config)
-  cfg <- jsonlite::fromJSON(opt$config)
+  cfg <- jsonlite::fromJSON(opt$config, simplifyVector = FALSE)
   
   message("Config keys: ", paste(names(cfg), collapse = ", "))
   
@@ -168,16 +199,16 @@ if (!dir.exists(dice_dir)) die("Could not find DiCE directory. Expected: ", dice
 source(file.path(dice_dir, "calculate_NetCentralities.R"))
 source(file.path(dice_dir, "calculate_weightedIG.R"))
 source(file.path(dice_dir, "corr_calculations.R"))
-source(file.path(dice_dir, "createFinalRanking.R"))
+source(file.path(dice_dir, "ensemble_Ranking.R"))
 source(file.path(dice_dir, "createPPI.R"))
 source(file.path(dice_dir, "DiCE.R"))
 source(file.path(dice_dir, "fileReader.R"))
-source(file.path(dice_dir, "network_analysis.R"))
 source(file.path(dice_dir, "normalize_df_cols.R"))
 source(file.path(dice_dir, "Phase_1.R"))
 source(file.path(dice_dir, "Phase_2.R"))
 source(file.path(dice_dir, "Phase_3.R"))
 source(file.path(dice_dir, "Phase_4.R"))
+source(file.path(dice_dir, "Phase_5.R"))
 source(file.path(dice_dir, "protein_coding_filter.R"))
 source(file.path(dice_dir, "unweighted_module_analysis.R"))
 source(file.path(dice_dir, "weighted_module_analysis_helpers.R"))
@@ -197,6 +228,13 @@ ig_custom_cutoff <- if (tolower(opt$ig_cutoff) == "custom") opt$ig_custom_cutoff
 if (tolower(opt$ig_cutoff) == "custom" && (is.null(ig_custom_cutoff) || is.na(ig_custom_cutoff))) {
   die("ig_cutoff=custom but --ig_custom_cutoff is missing.")
 }
+
+opt$dice_logic <- toupper(trimws(opt$dice_logic))
+if (!(opt$dice_logic %in% c("AND", "OR"))) {
+  die("--dice_logic must be either 'AND' or 'OR'.")
+}
+
+dice_rules <- parse_dice_rules(opt$dice_rules)
 
 # force these (user cannot change)
 forced_data_type <- "bulkRNA-seq"
@@ -220,8 +258,9 @@ dice_res <- perform_DiCE(
   corr_mode             = "directCorr",
   corr_method           = opt$corr_method,
   centrality_list       = centrality_list,
-  min_passCount         = if (is.null(opt$min_passCount)) length(centrality_list) else opt$min_passCount,
-  cutoff                = opt$cutoff
+  dice_rules            = dice_rules,
+  dice_logic            = opt$dice_logic
+  
 )
 
 result_df <- as.data.frame(dice_res$dice_results_df)

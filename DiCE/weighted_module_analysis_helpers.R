@@ -27,14 +27,19 @@ filter_weightedEdges <- function(all_edges, condition) {
 #' identify network modules using the Louvain community detection algorithm.
 #'
 #' @param interactions Data frame with `Gene1`, `Gene2`, and `weight`.
+#' @param louvain_resolution  Resolution parameter for computing modularity in Louvain algorithm (default 1).
 #' @param seed Random seed for reproducibility.
 #'
 #' @return List containing the igraph object, detected communities, and node membership.
 #' @noRd
-detect_communities <- function(interactions,
+detect_communities <- function(interactions = interactions,
+                               louvain_resolution = louvain_resolution,
                                seed = 123){
   RNGkind(kind = "Mersenne-Twister", normal.kind = "Inversion", sample.kind = "Rejection")
   set.seed(seed)
+  
+  # convert the weight for the absolute value
+  interactions$weight <- abs(as.numeric(interactions$weight))
   
   # Build weighted graph
   graph <- graph_from_data_frame(interactions, directed = FALSE)
@@ -43,7 +48,7 @@ detect_communities <- function(interactions,
   # Louvain community detection
   cl_louvain <- cluster_louvain(graph, 
                                 weights = E(graph)$weight,
-                                resolution = 1)
+                                resolution = louvain_resolution)
   memb <- membership(cl_louvain)
   
   return(list(graph = graph,
@@ -57,6 +62,7 @@ detect_communities <- function(interactions,
 #' Internal helper to summarize detected communities, compute node
 #' membership and within-module degree, and split intra-module edges.
 #'
+#' @param condition Character string specifying the condition name.
 #' @param interactions Data frame with `Gene1`, `Gene2`, and `weight`.
 #' @param graph igraph object of the network.
 #' @param membership Named vector of node module assignments.
@@ -65,13 +71,27 @@ detect_communities <- function(interactions,
 #' @return List containing module summary, node membership table,
 #' and intra-module edges grouped by module.
 #' @noRd
-extract_communityDetails <- function(interactions,graph,membership,communities){
+extract_communityDetails <- function(condition, interactions,graph, membership, communities){
   # Annotate edges with module IDs and keep only intra-module edges
   edge_cols <- intersect(c("Gene1","Gene2","weight"), colnames(interactions))
   edge_df <- interactions[, edge_cols, drop = FALSE]
   edge_df$Module_Gene1 <- membership[edge_df$Gene1]
   edge_df$Module_Gene2 <- membership[edge_df$Gene2]
   
+  edges_with_modules <- edge_df[, c("Gene1","Gene2","weight",
+                                    "Module_Gene1","Module_Gene2")]
+  
+  edges_with_modules <- edges_with_modules %>%
+    dplyr::mutate(
+      Module_Gene1 = paste0(condition, "_M", Module_Gene1),
+      Module_Gene2 = paste0(condition, "_M", Module_Gene2)
+    ) %>%
+    dplyr::rename(
+      !!paste0("weight_", condition) := weight,
+      !!paste0("Module_Gene1_", condition) := Module_Gene1,
+      !!paste0("Module_Gene2_", condition) := Module_Gene2
+    )
+
   intra_df <- subset(edge_df, Module_Gene1 == Module_Gene2)
   intra_df$Module <- intra_df$Module_Gene1
   intra_df$Module_Gene1 <- NULL
@@ -105,7 +125,7 @@ extract_communityDetails <- function(interactions,graph,membership,communities){
   
   return(list(summary_df = summary_df,
               membership_df = membership_df,
-              edges_by_module = edges_by_module))
+              edges_with_modules = edges_with_modules))
 }
 
 #' Calculate module density statistics
@@ -315,4 +335,36 @@ node_moduleInfo <- function(res, condition, weight_attr = "weight") {
            Participation_Coefficient,
            Intra_Module_Degree,
            Inter_Module_Degree)
+}
+
+#' Summarize inter-module connectivity within a condition
+#'
+#' @param all_edges A data frame containing all the edge weights and modules information
+#' @param condition Character string specifying the condition name.
+#'
+#' @return A data frame with one row per inter-module pair
+#' @noRd
+inter_module_connectivity <- function(edges_with_modules, condition){
+  
+  mod1_col   <- paste0("Module_Gene1_", condition)
+  mod2_col   <- paste0("Module_Gene2_", condition)
+  weight_col <- paste0("weight_", condition)
+  
+  inter_module <- edges_with_modules %>%
+    dplyr::filter(.data[[mod1_col]] != .data[[mod2_col]])
+  
+  inter_module_summary <- inter_module %>%
+    dplyr::mutate(
+      Module_A = pmin(.data[[mod1_col]], .data[[mod2_col]]),
+      Module_B = pmax(.data[[mod1_col]], .data[[mod2_col]])
+    ) %>%
+    dplyr::group_by(Module_A, Module_B) %>%
+    dplyr::summarise(
+      edge_count  = dplyr::n(),
+      weight_sum  = sum(.data[[weight_col]], na.rm = TRUE),
+      weight_mean = mean(.data[[weight_col]], na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  return(inter_module_summary)
 }

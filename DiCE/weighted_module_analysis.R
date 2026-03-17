@@ -11,6 +11,7 @@
 #' `weight_<treatment>`. E.g., "Tumor").
 #' @param control Character string naming the control condition (used to select
 #' `weight_<control>`. E.g., "Normal").
+#' @param louvain_resolution  Resolution parameter for computing modularity in Louvain algorithm (default 1).
 #' @param seed Random seed for reproducibility (default 123).
 #'
 #' @return A list with:
@@ -29,6 +30,7 @@
 #'   interactions_df = intr_df,
 #'   treatment = "Tumor",
 #'   control = "Normal",
+#'   louvain_resolution = 0.9,
 #'   seed = 123
 #' )
 #' 
@@ -42,6 +44,7 @@ detect_PPI_weightedModules <- function(gene_list = list(),
                                        interactions_df = NULL,
                                        treatment = NULL,
                                        control = NULL,
+                                       louvain_resolution = 1,
                                        seed = 123)
 {
   
@@ -64,28 +67,28 @@ detect_PPI_weightedModules <- function(gene_list = list(),
   control_intrs <- filter_weightedEdges(keep_interactions, control)
   
   # Detect network communities for treatment and control networks
-  treatment_comDetection <- detect_communities(treatment_intrs)
+  treatment_comDetection <- detect_communities(treatment_intrs,louvain_resolution)
   treatment_graph <- treatment_comDetection$graph
   treatment_communities <- treatment_comDetection$communities
   treatment_membs <- treatment_comDetection$membership
   
-  control_comDetection <- detect_communities(control_intrs)
+  control_comDetection <- detect_communities(control_intrs,louvain_resolution)
   control_graph <- control_comDetection$graph
   control_communities <- control_comDetection$communities
   control_membs <- control_comDetection$membership
 
   # Get treatment and control community details
-  treatment_comDetails <- extract_communityDetails(treatment_intrs,treatment_graph,
+  treatment_comDetails <- extract_communityDetails(treatment, treatment_intrs,treatment_graph,
                                                    treatment_membs,treatment_communities)
   treatment_summary_df <- treatment_comDetails$summary_df
   treatment_memb_df <- treatment_comDetails$membership_df
-  treatment_edges_by_module <- treatment_comDetails$edges_by_module
+  treatment_edges_with_module <- treatment_comDetails$edges_with_module
   
-  control_comDetails <- extract_communityDetails(control_intrs,control_graph,
+  control_comDetails <- extract_communityDetails(control, control_intrs,control_graph,
                                                  control_membs,control_communities)
   control_summary_df <- control_comDetails$summary_df
   control_memb_df <- control_comDetails$membership_df
-  control_edges_by_module <- control_comDetails$edges_by_module
+  control_edges_with_module <- control_comDetails$edges_with_module
   
   treatment_summary_df$Condition <- treatment
   control_summary_df$Condition   <- control
@@ -118,14 +121,29 @@ detect_PPI_weightedModules <- function(gene_list = list(),
                            suffix = c(paste0("_",treatment), paste0("_",control)))
   
   
+  # Analysis 3 - get all interactions with modules information and edge weights
+  edges_with_modules <- full_join(treatment_edges_with_module, control_edges_with_module, by = c("Gene1", "Gene2"))
+  
+  edges_with_modules <- edges_with_modules[, c(
+    "Gene1",paste0("Module_Gene1_",treatment), paste0("Module_Gene1_",control),
+    "Gene2",paste0("Module_Gene2_",treatment),paste0("Module_Gene2_",control),
+    paste0("weight_",treatment),paste0("weight_",control)
+    
+  )]
+  
+  # Analysis 4 - condition specific intermodule connectivity
+  treatment_interMod <- inter_module_connectivity(edges_with_modules, treatment)
+  control_interMod <- inter_module_connectivity(edges_with_modules, control)
   
   return(list(network_modules = combined_summary_df,
               module_stats = combined_modSummary,
               cmp_jaccard = cmp_jaccard,
               cmp_count = cmp_count,
               nodes_stats = nodes_combined,
-              treatment_edges_by_module = treatment_edges_by_module,
-              control_edges_by_module = control_edges_by_module))
+              edges_with_modules = edges_with_modules,
+              treatment_interMod = treatment_interMod,
+              control_interMod = control_interMod
+              ))
 
   
 }

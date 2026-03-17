@@ -1,5 +1,69 @@
 # ----------- Functions to calculate different network centralities ------------
 
+#' Calculate Network Centralities
+#'
+#' Computes selected network centrality measures for a given interaction
+#' network and returns a combined table of centrality scores per gene.
+#'
+#' @param corr_known_interactions Data frame of gene interactions (e.g. source–target edges with corresponding treatment and control weights).
+#' @param centrality_list Character vector of centralities to compute.
+#' Supported: betweenness, eigenvector, authority, strength, closeness,
+#' pagerank, harmonic.
+#'
+#' @return A data frame with genes and their calculated centrality values.
+#'
+#' @noRd
+calculate_centralities <- function(corr_known_interactions,centrality_list){
+  # Calculate network centralities
+  cent_value_list <- list()
+  
+  for (centrality in centrality_list){
+    centrality = tolower(centrality)
+    
+    if ((centrality == "betweenness") | (centrality == "betweeness")){
+      cent_df <- calc_betweenness(corr_known_interactions)
+      
+    }else if ((centrality == "eigen vector") | 
+              (centrality == "eig") | 
+              (centrality == "eigenvector")){
+      cent_df <- calc_eigenVC(corr_known_interactions)
+      
+    }else if (centrality == "authority"){
+      cent_df <- calc_authority(corr_known_interactions)
+      
+    }else if (centrality == "strength"){
+      cent_df <- calc_strength(corr_known_interactions)
+      
+    }else if (centrality == "closeness"){
+      cent_df <- calc_closeness(corr_known_interactions)
+      
+    }else if (centrality == "pagerank"){
+      cent_df <- calc_pagerank(corr_known_interactions)
+      
+    }else if (centrality == "harmonic"){
+      cent_df <- calc_harmonic(corr_known_interactions)
+      
+    }else {
+      stop("Invalid network centrality measure or it is not supported by DiCE. 
+           DiCE supports for betweeness/eigen vector/authority/strength/closeness/pagerank/harmonic !")
+    }
+    
+    # Convert row names to a 'Gene.Symbol' column
+    cent_df <- cent_df %>%
+      tibble::rownames_to_column(var = "Gene.Symbol")
+    
+    cent_value_list[[centrality]] <- cent_df
+  }
+  
+  # Combine all by 'Gene' column
+  combined_centralities <- purrr::reduce(cent_value_list, full_join, by = "Gene.Symbol")
+  
+  combined_centralities <- combined_centralities %>% relocate(Gene.Symbol)
+  
+  return(combined_centralities)
+  
+}
+
 
 #' Run calc_betweenness: Betweenness calculation function on undirected graph based on the distance
 #' Helper function (not for users)
@@ -13,7 +77,7 @@ calc_betweenness <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = (1-(interactions$weight))+0.001)
+                         value = (1-abs(interactions$weight))+0.001)
   E(graph)$weight[is.na(E(graph)$weight)] <- 1
   
   btw_vals <- betweenness(graph,
@@ -37,7 +101,7 @@ calc_eigenVC <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = interactions$weight)
+                         value = abs(interactions$weight))
   
   # Replace missing edge weights with 0 (min weight -weakest link)
   E(graph)$weight[is.na(E(graph)$weight)] <- 0
@@ -62,7 +126,7 @@ calc_authority <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = interactions$weight)
+                         value = abs(interactions$weight))
   
   # Replace missing edge weights with 0 (min weight -weakest link)
   E(graph)$weight[is.na(E(graph)$weight)] <- 0
@@ -87,7 +151,7 @@ calc_strength <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = interactions$weight)
+                         value = abs(interactions$weight))
   
   # Replace missing edge weights with 0 (min weight -weakest link)
   E(graph)$weight[is.na(E(graph)$weight)] <- 0
@@ -112,7 +176,7 @@ calc_closeness <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = (1-(interactions$weight))+0.001)
+                         value = (1-(abs(interactions$weight)))+0.001)
   E(graph)$weight[is.na(E(graph)$weight)] <- 1
   
   close_vals <- closeness(graph,
@@ -136,7 +200,7 @@ calc_pagerank <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = interactions$weight)
+                         value = abs(interactions$weight))
   
   # Replace missing edge weights with 0 (min weight -weakest link)
   E(graph)$weight[is.na(E(graph)$weight)] <- 0
@@ -161,7 +225,7 @@ calc_harmonic <- function(interactions){
   graph <- graph_from_data_frame(interactions,directed = FALSE)
   graph <- set_edge_attr(graph,
                          "weight",
-                         value = (1-(interactions$weight))+0.001)
+                         value = (1-(abs(interactions$weight)))+0.001)
   E(graph)$weight[is.na(E(graph)$weight)] <- 1
   
   harmonic_vals <- harmonic_centrality(graph,

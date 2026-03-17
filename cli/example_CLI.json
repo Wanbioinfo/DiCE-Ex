@@ -13,7 +13,20 @@
   "ig_custom_cutoff": null,
   "corr_method": "pearson",
   "centrality_list": "betweenness,eigenvector",
-  "cutoff": "mean",
+  "dice_rules": [
+    {
+      "type": "centrality",
+      "metric": "betweenness",
+      "threshold_type": "percent",
+      "threshold": 25
+    },
+    {
+      "type": "ensemble",
+      "threshold_type": "rank",
+      "threshold": 200
+    }
+  ],
+  "dice_logic": "OR",
   "run_modules": true,
   "seed": 123,
   "outdir": "dice_cli_output",

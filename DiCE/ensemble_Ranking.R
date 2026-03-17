@@ -84,7 +84,7 @@ centrality_prefix <- function(x) {
 #'
 #' @return Dataframe of final ranking of each gene
 #' @noRd
-createFinalRanking <- function(dge_data, phase1_res, 
+ensemble_Ranking <- function(dge_data, phase1_res, 
                                phase2_res, phase4_centralities_df,
                                centrality_list){
 
@@ -118,7 +118,6 @@ createFinalRanking <- function(dge_data, phase1_res,
     final_rank_df <- bind_rows(final_rank_df, only_phase2_rows)
     
   }
-  
   
   # add Phase1 genes information for the final rank
   # add only the genes found in phase1

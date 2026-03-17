@@ -12,21 +12,60 @@
 #'
 #' @return Correlation matrix of the Phase 2 genes
 #' @noRd
-calculate_correlation <- function(class_geneExp, corr_method, corr_mode){
+calculate_correlation <- function(class_geneExp, corr_method, corr_mode, corr_pval_cutoff){
   if(corr_mode == "directCorr"){
-    corr_matrix <- traditional_corr(class_geneExp, corr_method)
+    corr_matrix <- traditional_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
   }else if (corr_mode == "remove_Zerocells"){
-    corr_matrix <- remove_Zerocells_corr(class_geneExp, corr_method)
+    corr_matrix <- remove_Zerocells_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
   }else if (corr_mode == "ZINB-WaVE"){
-    corr_matrix <- traditional_corr(class_geneExp, corr_method)
+    corr_matrix <- traditional_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
   }else{
     stop("Invalid correlation mode OR correlation method!")
   }
   
   return(corr_matrix)
+}
+
+map_corr_weights <- function(interactions, class_geneExp, corr_matrix){
+  colnames(interactions)=c("node1","node2")
+  
+  vertices <- c(interactions$node1, interactions$node2)
+  vertices <- unique(vertices)
+  
+  # Which network nodes have expression data
+  nodes_with_exp <- intersect(vertices,colnames(class_geneExp))
+  # List of vertices that do not appear in the expression data
+  diff <- setdiff(vertices,nodes_with_exp)
+  # Remove those unmatched
+  vertices <- vertices[!vertices %in% c(diff)]
+  
+  # Extract a submatrix from the correlation matrix mat1, limited to only the vertex genes
+  vertices <- intersect(vertices, rownames(corr_matrix))
+  vertex_corrMat <- corr_matrix[vertices,vertices]
+  
+  # Melt the correlation matrix into long format
+  melt_vertex_corrMat <- stack(as.data.frame(vertex_corrMat))
+  melt_vertex_corrMat$ind <- as.character(melt_vertex_corrMat$ind)
+  
+  ind2 <- rep(row.names(vertex_corrMat), times = ncol(vertex_corrMat))
+  melt_vertex_corrMat <- cbind(melt_vertex_corrMat,ind2)
+  melt_vertex_corrMat <- melt_vertex_corrMat[order(match(melt_vertex_corrMat[,3],
+                                                         interactions[,1])),]
+  # Concatenate interacting gene names (node2 + node1)
+  concat_pairs <- paste(interactions[,2],interactions[,1])
+  
+  # Filter matching known STRING interactions
+  corr_known_interactions <- melt_vertex_corrMat[paste(melt_vertex_corrMat$ind,
+                                                       melt_vertex_corrMat$ind2) %in% concat_pairs,]
+  corr_known_interactions <- cbind(corr_known_interactions[3],
+                                   corr_known_interactions[2],
+                                   corr_known_interactions[1])
+  colnames(corr_known_interactions) <- c("source", "target", "weight")
+  
+  return(corr_known_interactions)
 }
 
 
@@ -45,7 +84,7 @@ calculate_correlation <- function(class_geneExp, corr_method, corr_mode){
 #' @return Dataframe of edges with the corresponding weights (correlation coefficient) 
 #' @noRd
 run_phase3 <- function(interactions, geneExp_to_corr, treatment, control, 
-                       corr_method, corr_mode, centrality_list){
+                       corr_method, corr_mode, corr_pval_cutoff){
   
   class_geneExp_treatment <- geneExp_to_corr[geneExp_to_corr$class==treatment,]
   class_geneExp_treatment <- class_geneExp_treatment[,-ncol(geneExp_to_corr)]
@@ -53,46 +92,24 @@ run_phase3 <- function(interactions, geneExp_to_corr, treatment, control,
   class_geneExp_control <- geneExp_to_corr[geneExp_to_corr$class==control,]
   class_geneExp_control <- class_geneExp_control[,-ncol(geneExp_to_corr)]
   
-  gene_corr_treatment <- calculate_correlation(class_geneExp_treatment, corr_method, corr_mode)
-  gene_corr_control <- calculate_correlation(class_geneExp_control, corr_method, corr_mode)
+  gene_corr_treatment <- calculate_correlation(class_geneExp_treatment, corr_method, corr_mode, corr_pval_cutoff)
+  gene_corr_control <- calculate_correlation(class_geneExp_control, corr_method, corr_mode, corr_pval_cutoff)
   
-  treatment_ppi_output <- PPI_network_analysis(interactions,
+  treatment_ppi_interactions <- map_corr_weights(interactions,
                                                class_geneExp_treatment,
-                                               gene_corr_treatment,
-                                               centrality_list)
-  centralities_treatment <- treatment_ppi_output$centralities
-  interactions_treatment <- treatment_ppi_output$corr_known_interactions
-  
-  # add suffix
-  centralities_treatment <- as.data.frame(centralities_treatment)
-  suffix <- "_treatment" 
-  colnames(centralities_treatment)[-1] <- paste0(colnames(centralities_treatment)[-1], suffix)
-  
-  
-  control_ppi_output <- PPI_network_analysis(interactions,
+                                               gene_corr_treatment)
+
+  control_ppi_interactions <- map_corr_weights(interactions,
                                              class_geneExp_control,
-                                             gene_corr_control,
-                                             centrality_list)
+                                             gene_corr_control)
   
-  centralities_control <- control_ppi_output$centralities
-  interactions_control <- control_ppi_output$corr_known_interactions
-  
-  # add suffix
-  centralities_control <- as.data.frame(centralities_control)
-  suffix <- "_control" 
-  colnames(centralities_control)[-1] <- paste0(colnames(centralities_control)[-1], suffix)
-  
-  
-  # Merge treatment and control centralities
-  merge_centralities_df <- merge(centralities_treatment, centralities_control, by = "Gene.Symbol")
 
   # Combine interactions edge weights in treatment and control
-  merge_interactions_df <- merge(interactions_treatment, interactions_control, 
+  merge_interactions_df <- merge(treatment_ppi_interactions, control_ppi_interactions, 
                                  by = c("source", "target"), 
                                  suffixes = c("_treatment", "_control"), all = TRUE)
   
-  return(list(phase3_centralities_df = merge_centralities_df,
-              interactions_withWeights_df = merge_interactions_df))
+  return(merge_interactions_df)
   
 }
 

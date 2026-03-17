@@ -92,194 +92,66 @@ get_centDiff <- function(centralities_df, centrality_list){
   return(centralities_df)
 }
 
-
-#' Compute a Numeric Cutoff Value
-#'
-#' Calculates a cutoff threshold from a numeric vector using one of three modes:
-#' mean, median, or a top-K/top-K% percentile rule.
-#'
-#' Helper function (not for users)
-#' 
-#' @param x Numeric vector from which the cutoff is computed.
-#' @param cutoff Method for selecting final candidate genes based on centrality metrics ("mean", "median", or "topK\%" such as "top10\%", "top25\%").
-#'
-#' @return A numeric cutoff threshold.
-#'
-#' @noRd
-compute_cutoff <- function(x, cutoff) {
-  x <- as.numeric(x)
-  cutoff <- tolower(cutoff)
-  if (cutoff == "mean") {
-    return(mean(x, na.rm = TRUE))
-  } else if (cutoff == "median") {
-    return(median(x, na.rm = TRUE))
-  } else if (grepl("^top[0-9]+%?$", cutoff)) {
-    k <- as.numeric(gsub("top|%", "", cutoff))
-    q <- 1 - (k / 100)  # keep top k% => threshold is (1 - k%) quantile
-    return(quantile(x, probs = q, na.rm = TRUE, names = FALSE, type = 7))
-  } else {
-    stop("Invalid cutoff. Use 'mean', 'median', or 'topK'/'topK%'.")
-  }
-}
-
-
-#' Identify DiCE-Passing Genes Based on Centrality Cutoffs
-#'
-#' Evaluates each gene across multiple centrality metrics by applying cutoff
-#' thresholds to treatment and control centrality values, then selects genes
-#' that pass a minimum number of metrics.
-#'
-#' Helper function (not for users)
-#' 
-#' @param centralities_df Data frame containing centrality values with
-#'   \code{"<Prefix>_treatment"} and \code{"<Prefix>_control"} columns.
-#' @param cutoff Cutoff rule passed to \code{compute_cutoff()} (e.g., "mean",
-#'   "median", "top25\%").
-#' @param centrality_list Character vector of centrality metrics to evaluate.
-#' @param min_passCount Minimum number of centralities a gene must pass to be
-#'   selected as a DiCE gene.
-#'
-#' @return A list containing:
-#'   \itemize{
-#'     \item \code{pass_summary}: per-gene pass/fail and pass-count information
-#'     \item \code{thresholds}: cutoff thresholds used for each centrality
-#'     \item \code{DiCE_pass_df}: genes passing \code{min_passCount} metrics
-#'   }
-#'
-#' @noRd
-find_DiCEgenes <- function(centralities_df, cutoff, centrality_list, min_passCount){
-  pass_flags <- list()
-  thresholds  <- list() 
-  
-  # detect gene identifier column
-  gene_col <- if ("Gene.Symbol" %in% names(centralities_df)) "Gene.Symbol" else
-    if ("Gene" %in% names(centralities_df)) "Gene" else
-      stop("Expected a column 'Gene.Symbol' or 'Gene'.")
-  
-  for (centrality in centrality_list){
-    pfx <- centrality_prefix(centrality)
-    treat_col <- paste0(pfx,"_treatment")
-    ctrl_col <- paste0(pfx,"_control")
-    
-    # skip centralities not present
-    if (!all(c(treat_col, ctrl_col) %in% colnames(centralities_df))) {
-      warning(sprintf("Skipping %s (missing columns: %s or %s)", centrality, treat_col, ctrl_col))
-      next
-    }
-    
-    # thresholds
-    treat_thr <- compute_cutoff(centralities_df[[treat_col]], cutoff)
-    ctrl_thr <- compute_cutoff(centralities_df[[ctrl_col]], cutoff)
-    thresholds[[pfx]] <- c(treatment = treat_thr, control = ctrl_thr)
-    
-    # pass if treatment >= treat_thr OR control >= ctrl_thr
-    pass_flags[[pfx]] <- (centralities_df[[treat_col]] >= treat_thr) | (centralities_df[[ctrl_col]] >= ctrl_thr)
-  }
-  
-  # combine results
-  pass_df <- as.data.frame(pass_flags, optional = TRUE)
-  pass_df[[gene_col]] <- centralities_df[[gene_col]]
-  
-  # pass count
-  pass_df$pass_count <- rowSums(pass_df[names(pass_flags)], na.rm = TRUE)
-  
-  # list of passed centralities per gene
-  pass_df$pass_centralities <- apply(
-    pass_df[names(pass_flags)],
-    1,
-    function(x) {
-      passed <- names(pass_flags)[which(x)]
-      if (length(passed) == 0) return(NA_character_)
-      paste(passed, collapse = ",")
-    }
-  )
-  
-  # DiCE genes = genes passing >= dice_min centralities
-  DiCE_pass_df <- pass_df %>%
-    filter(pass_count >= min_passCount)
-  
-
-  list(
-    pass_summary = pass_df,        # includes per-gene pass info
-    thresholds   = thresholds,     # per-centrality cutoffs used
-    DiCE_pass_df   = DiCE_pass_df  # genes passing ≥ min_passCount
-  )
-  
-}
-
-
-#' Run DiCE Phase 4: Find DiCE genes based on network centrality measures
+#' Run DiCE Phase 4: Calculate centrality differences and ranks
 #'
 #' Helper function (not for users)
 #'
 #' @param centralities_df Data frame containing treatment and control
 #'   centrality values (e.g., \code{"<Prefix>_treatment"}, \code{"<Prefix>_control"}).
-#' @param cutoff Cutoff rule used when identifying DiCE genes (passed to
-#'   \code{compute_cutoff()}).
 #' @param centrality_list Character vector of centrality metrics to evaluate.
-#' @param min_passCount Minimum number of metrics a gene must pass to be
-#'   classified as a DiCE gene.
 #'
-#' @return A list with:
-#'   \itemize{
-#'     \item \code{DiCE_genes_df}: Data frame of Phase 4–selected DiCE genes
-#'     \item \code{phase4_centralities_df}: Full centrality table with ranks,
-#'           ensemble ranking, and pass/fail annotations
-#'   }
+#' @return A data frame containing the original input columns plus
+#'   per-centrality \code{"<Prefix>_diff"} and \code{"<Prefix>_rank"} columns.
 #'
 #' @noRd
-run_phase4 <- function(centralities_df, cutoff, centrality_list, min_passCount){
+run_phase4 <- function(phase3_interactions_df, centrality_list) {
   
-  # take difference between treatment and control centralities
+  treatment_interactions <- phase3_interactions_df[, c("source", "target", "weight_treatment")]
+  colnames(treatment_interactions)[colnames(treatment_interactions) == "weight_treatment"] <- "weight"
+  
+  control_interactions <- phase3_interactions_df[, c("source", "target", "weight_control")]
+  colnames(control_interactions)[colnames(control_interactions) == "weight_control"] <- "weight"
+  
+  # treatment centralities
+  centralities_treatment <- calculate_centralities(treatment_interactions,centrality_list)
+  centralities_treatment <- as.data.frame(centralities_treatment)
+  suffix <- "_treatment" 
+  colnames(centralities_treatment)[-1] <- paste0(colnames(centralities_treatment)[-1], suffix)
+  
+  # control centralities
+  centralities_control <- calculate_centralities(control_interactions,centrality_list)
+  centralities_control <- as.data.frame(centralities_control)
+  suffix <- "_control" 
+  colnames(centralities_control)[-1] <- paste0(colnames(centralities_control)[-1], suffix)
+  
+  
+  # Merge treatment and control centralities
+  centralities_df <- merge(centralities_treatment, centralities_control, by = "Gene.Symbol")
+  
+  # calculate treatment-control differences and centrality ranks
   centralities_df <- get_centDiff(centralities_df, centrality_list)
-
-  # find all columns ending with "_rank"
-  rank_cols <- grep("_rank$", colnames(centralities_df), value = TRUE)
-  
-  # compute consensus ranking - multiplies the ranks (lower product = better overall rank)
-  # (M+1-z)/M
-  centralities_df$ProductofRank <- ensemble_rank(centralities_df[, rank_cols, drop = FALSE],
-                                                 method = "ProductOfRank")
-  
-  # sort based on ProductofRank
-  centralities_df <- centralities_df[order(centralities_df[,"ProductofRank"],
-                                                         decreasing = TRUE ),]
-  
-  centralities_df$Phase4_rank <- seq_len(nrow(centralities_df))
   centralities_df <- as.data.frame(centralities_df)
   
-  # find the DiCE genes
-  dice_results <- find_DiCEgenes(centralities_df, cutoff, centrality_list, min_passCount)
-  DiCE_pass_df <- dice_results$DiCE_pass_df
-  pass_summary <- dice_results$pass_summary
-  pass_summary <- pass_summary[,c("Gene.Symbol","pass_count","pass_centralities")]
+  # rearrange columns
+  base_cols <- c(
+    "Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value",
+    if ("IG" %in% colnames(centralities_df)) "IG"
+  )
   
-  centralities_df <- merge(centralities_df, pass_summary, by = "Gene.Symbol")
-  
-  centralities_df <- centralities_df[order(centralities_df[,"ProductofRank"],
-                                           decreasing = TRUE ),]
-  
-  # Rearrange the columns
-  base_cols <- c("Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(centralities_df)) "IG")
-  
-  # for each requested centrality, ask for both treatment/control columns
   cent_cols <- unlist(lapply(centrality_list, function(cn) {
     pfx <- centrality_prefix(cn)
-    c(paste0(pfx, "_treatment"), paste0(pfx, "_control"), 
-      paste0(pfx, "_diff"),paste0(pfx,"_rank"))
+    c(
+      paste0(pfx, "_treatment"),
+      paste0(pfx, "_control"),
+      paste0(pfx, "_diff"),
+      paste0(pfx, "_rank")
+    )
   }), use.names = FALSE)
   
-  tail_cols <- c("pass_count","pass_centralities","Phase")
-  final_cols <- c(base_cols, cent_cols, tail_cols)
+  final_cols <- c(base_cols, cent_cols)
+  final_cols <- intersect(final_cols, colnames(centralities_df))
   
   centralities_df <- centralities_df[, final_cols, drop = FALSE]
   
-  DiCE_genes <- DiCE_pass_df$Gene.Symbol
-  centralities_df$Phase <- ifelse(centralities_df$Gene.Symbol %in% DiCE_genes, "DiCE", "III")
-  
-  DiCE_genes_df <- centralities_df[centralities_df$Gene.Symbol %in% DiCE_genes,]
-  
-  return(list(DiCE_genes_df = DiCE_genes_df,
-              phase4_centralities_df = centralities_df))
-  
+  return(centralities_df)
 }

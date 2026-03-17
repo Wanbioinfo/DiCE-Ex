@@ -79,62 +79,60 @@ results_tab <- function() {
         tabPanel(
           "DiCE PPI modules",
           
-          h3("Module summary"),
           div(
-            style = "margin-bottom:10px;",
+            style = "margin-bottom:12px;",
             uiOutput("download_modules_ui")
           ),
-          DTOutput("modules_summary_table"),
+          
+          h3("Module statistics"),
+          div(
+            style = "max-width:720px;",
+            DT::DTOutput("modules_stats_table")
+          ),
           br(),
           
           h3("Module membership & module subnetwork"),
           helpText(
-            "Use the module selector or the search box to filter rows. ",
-            "Click a gene row to visualize its subnetwork (within its module) on the right."
+            "Use the module selector or the search box to filter rows. Click a gene row to visualize its subnetwork (within its module) on the right."
           ),
           helpText(
             "By clicking a node in the network, you can view the gene expression changes."
           ),
           
           fluidRow(
-            # left: membership table + filters
             column(
-              width = 6,
+              width = 4,
               
-              # Module filter
               selectInput(
                 "mm_module_filter",
                 "Filter by module",
-                choices  = c("All modules" = "all"),  # updated from server
+                choices  = c("All modules" = "all"),
                 selected = "all",
-                width = "50%"  
+                width = "70%"
               ),
               
-              # Gene search
               div(
                 style = "margin:8px 0 10px 0;",
                 textInput(
-                  inputId     = "mm_gene_search",   # <-- matches server
+                  inputId     = "mm_gene_search",
                   label       = "Gene search:",
                   placeholder = "e.g., POLE2",
-                  width       = "50%"
+                  width       = "70%"
                 )
               ),
               
-              DTOutput("modules_membership_table")
+              DT::DTOutput("modules_membership_table")
             ),
             
-            # right: visNetwork subnetwork
             column(
-              width = 6,
+              width = 8,
               style = "padding-right:0;",
               
               div(
                 class = "module-network-panel",
-                style = "margin-top:40px;",
                 visNetworkOutput(
                   "ppi_module_network",
-                  height = "650px",
+                  height = "750px",
                   width  = "100%"
                 )
               )

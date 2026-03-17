@@ -37,13 +37,45 @@
 #'   \item{"remove_Zerocells"}{Exclude cell pairs where both genes have zero expression before computing correlation.}
 #'   \item{"ZINB-WaVE"}{Apply ZINB-WaVE denoising before computing correlation.}
 #' }
-#' @param newwave_K Number of latent factors used for single-cell normalization (K in newWave model). Default is 5.
 #' @param corr_method Correlation method ("pearson" OR "spearman"). Default "pearson".
+#' @param corr_pval_cutoff P-value threshold (default 1, no filtering); correlations with p-value > cutoff are set to 0.
 #' @param centrality_list Character vector of centrality metrics to compute.  
 #'   Valid options include: "betweenness", "eigen vector", "pagerank", "closeness", "harmonic", "authority", "strength". 
 #'   (Names are normalized internally.)
-#' @param min_passCount Minimum number of centrality metrics a gene must pass to be retained. Default is the length of \code{centrality_list}.
-#' @param cutoff Method for selecting final candidate genes based on centrality metrics ("mean", "median", or "topK\%" such as "top10\%", "top25\%"). Default "mean".
+#' @param dice_rules A list of DiCE selection rules used to classify genes as final DiCE genes after ensemble ranking.
+#'   
+#'   Each rule must be created using helper functions such as
+#'   \code{dice_centrality_rule()} or \code{dice_ensemble_rule()}.
+#'   
+#'   For a centrality rule, a gene passes if its centrality value is within the
+#'   top specified cutoff in either the treatment network or the control network.
+#'   For an ensemble rule, a gene passes if its \code{Ensemble_Rank} is within
+#'   the specified cutoff.
+#'   
+#'   Example:
+#'   \preformatted{
+#'   dice_rules = list(
+#'     dice_centrality_rule(
+#'       metric = "betweenness",
+#'       threshold_type = "percent",
+#'       threshold = 25
+#'     ),
+#'     dice_ensemble_rule(
+#'       threshold_type = "rank",
+#'       threshold = 200
+#'     )
+#'   )
+#'   }
+#'
+#' @param dice_logic Character string specifying how multiple \code{dice_rules}
+#'   are combined to determine final DiCE genes. Must be either \code{"AND"} or
+#'   \code{"OR"}.
+#'   
+#'   If \code{"AND"}, a gene must satisfy all rules.
+#'   If \code{"OR"}, a gene must satisfy at least one rule.
+#'   
+#'   If only one rule is provided in \code{dice_rules}, \code{dice_logic} has no
+#'   practical effect.
 #' @param markTF If TRUE, transcription factor genes will be marked. Default FALSE.
 #' 
 #'
@@ -75,6 +107,11 @@
 #' @importFrom utils stack combn read.csv read.delim read.table
 #' @importFrom parallel mclapply
 #' @importFrom NetWeaver ensemble_rank
+#' @importFrom zinbwave zinbwave
+#' @importFrom SingleCellExperiment SingleCellExperiment
+#' @importFrom NewWave newWave
+#' @importFrom scuttle logNormCounts
+#' @importFrom SummarizedExperiment assay SummarizedExperiment
 #' @importFrom stats cor quantile median as.formula setNames sd
 #' @importFrom BiocParallel register MulticoreParam
 #' @importFrom readxl read_excel
@@ -84,6 +121,7 @@
 #' @importFrom purrr map
 #' @importFrom tidyr unnest_wider
 #' @importFrom Matrix rowSums sparseMatrix
+#' @importFrom Hmisc rcorr
 #'
 #' @examples
 #' \dontrun{
@@ -102,7 +140,8 @@
 #'   ig_cutoff = "nonzero_mean",
 #'   corr_mode = "directCorr",
 #'   corr_method = "pearson",
-#'   cutoff = "mean"
+#'   corr_pval_cutoff = 0.05,
+#' 
 #' )
 #' head(dice_results$dice_results_df)
 #' }
@@ -127,9 +166,21 @@ perform_DiCE <- function(
     corr_mode = "directCorr",
     newwave_K = 5,
     corr_method = "pearson",
+    corr_pval_cutoff = 0.05,
     centrality_list = c("betweenness", "eigen vector"),
-    min_passCount = length(centrality_list),
-    cutoff = "mean",
+    dice_rules = list(
+      dice_centrality_rule(
+        metric = "betweenness",
+        threshold_type = "percent",
+        threshold = 25
+      ),
+      dice_centrality_rule(
+        metric = "eigen vector",
+        threshold_type = "percent",
+        threshold = 25
+      )
+    ),
+    dice_logic = "AND",
     markTF = FALSE
     ) 
 {
@@ -144,20 +195,17 @@ perform_DiCE <- function(
   }
 
   # String db downloaded files
-  if(species == "human"){
+  if(tolower(species) == "human"){
     string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
-    #    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-    #    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
     taxonID <- 9606
-  }else if(species == "mouse"){
+  }else if(tolower(species) == "mouse"){
     string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
-    #    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-    #    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
     taxonID = 10090
+  }else{
+    stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }
-  
 
   ############################### Load data #############################################
   
@@ -168,13 +216,47 @@ perform_DiCE <- function(
     stop("Invalid or missing 'dge_file_path'")
   }
   
-  if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
-    stop("Invalid or missing 'normGeneExp_file_path'")
-  }
-  
   dge_data <- read_any(dge_file_path)
-  normGeneExp_data <- read_any(normGeneExp_file_path)
   
+  if (data_type == "scRNA-seq") {
+    
+    
+    # read raw read counts
+    if (is.null(rawGeneExp_file_path) || !file.exists(rawGeneExp_file_path)) {
+      stop("Invalid or missing 'rawGeneExp_file_path' for scRNA-seq data.")
+    }
+    
+    rawGeneExp_data <- read_any(rawGeneExp_file_path)
+    
+    # read normalized 
+    if (tolower(ig_method) %in% c("ig", "wig")) {
+      
+      if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
+        stop("Invalid or missing 'normGeneExp_file_path' when ig_method is 'ig' or 'wig'.")
+      }
+      
+      normGeneExp_data <- read_any(normGeneExp_file_path)
+      
+    }
+    
+    if (!(corr_mode %in% c("ZINB-WaVE", "NewWave"))) {
+      
+      if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
+        stop("Invalid or missing 'normGeneExp_file_path' when ig_method is 'ig' or 'wig'.")
+      }
+      
+      normGeneExp_data <- read_any(normGeneExp_file_path)
+    }
+    
+  } else if (data_type == "bulkRNA-seq") {
+    if (is.null(normGeneExp_file_path) || !file.exists(normGeneExp_file_path)) {
+      stop("Invalid or missing 'normGeneExp_file_path'.")
+    }
+    normGeneExp_data <- read_any(normGeneExp_file_path)
+    
+  } else {
+    stop("Invalid value for 'data_type'. Select from 'bulkRNA-seq' or 'scRNA-seq'.")
+  }
   
   # Change column names to DiCE col names
   dge_data <- normalize_dge_cols(dge_data)
@@ -212,7 +294,7 @@ perform_DiCE <- function(
                             "|logFC|>",
                             logFC_cutoff)
   
-  message(paste0("#Genes in Phase 1 (", phase1_criteria, ") = ", nrow(phase1_res)))
+  message(paste0("#Genes in Phase1 (", phase1_criteria, ") = ", nrow(phase1_res)))
   
   
   ############################### Phase 2 ###############################################
@@ -255,7 +337,7 @@ perform_DiCE <- function(
       stop("Invalid cutoff for IG!. Please select from 'all_mean', 'all_median', 'nonzero_mean', 'nonzero_median', 'all_nonzero', and 'custom'.")
     }
     
-    message(paste0("#Genes in Phase 2 (",phase2_criteria,") = " , nrow(phase2_genes_df)))
+    message(paste0("#Genes in Phase2 (",phase2_criteria,") = " , nrow(phase2_genes_df)))
     
     to_phase3 <- phase2_genes_df
     
@@ -271,6 +353,8 @@ perform_DiCE <- function(
   ############################### Phase 3 ###############################################
   
   # Making weighted PPI using (1-|C.C|) for each phenotype
+  
+  message("Phase3: Creating PPI network for Phase2 genes from StringDB")
   
   # Extract interactions
   ppi_results_phase3 <- extract_PPI(string_protInfo_file, 
@@ -292,9 +376,15 @@ perform_DiCE <- function(
                                                       mapped_proteins)
   }
   
-  if ((corr_mode == "directCorr") | (corr_method == "remove_Zerocells")){
+  if (corr_mode == "ZINB-WaVE"){
+    print("Raw gene expression - ZINB-WaVE")
+    filtered_denoised_geneExp <- zinbWave_model(filtered_raw_geneExp)
+    geneExp_to_corr <- filtered_denoised_geneExp
+    
+  }else if ((corr_mode == "directCorr") | (corr_mode == "remove_Zerocells")){
     print("Normalized gene expressions")
     geneExp_to_corr <- filtered_normGeneExp_data
+    
   }else{
     stop("Invalid correlation mode. Use 'directCorr', 'remove_Zerocells', 'ZINB-WaVE'")
   }
@@ -308,50 +398,57 @@ perform_DiCE <- function(
     stop("Missing 'control'")
   }
   
-  phase3_res <- run_phase3(pp_interactions, geneExp_to_corr, treatment, control, 
-                           corr_method, corr_mode, centrality_list)
+  phase3_interactions_df <- run_phase3(pp_interactions, geneExp_to_corr, treatment, control, 
+                           corr_method, corr_mode, corr_pval_cutoff)
   
-  phase3_centralities_df <- phase3_res$phase3_centralities_df
-  interactions_withWeights_df <- phase3_res$interactions_withWeights_df
+  phase3_genes <- unique(c(phase3_interactions_df$source, phase3_interactions_df$target))
+
   
-  phase3_centralities_df$Phase <- "III"
+  message(paste0("#Genes in Phase3 (PPI) = "),length(phase3_genes))
   
-  message(paste("#Genes in Phase 3 (StringDB PPI) = ", nrow(phase3_centralities_df)))
-  
-  phase3_centralities_out_df <- merge(phase3_centralities_df, mapped_proteins, 
-                               by.x = "Gene.Symbol", by.y = "Gene.Symbol")
-  colnames(phase3_centralities_out_df)[1] <- "Gene.Symbol"
-  
-  # Rearrange the columns
-  base_cols <- c("Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(phase3_centralities_out_df)) "IG")
-  cent_cols <- colnames(phase3_centralities_out_df)[2:((length(centrality_list)*2)+1)]
-  tail_cols <- "Phase"
-  final_cols <- c(base_cols, cent_cols, tail_cols)
-  
-  phase3_centralities_out_df <- phase3_centralities_out_df[, final_cols, drop = FALSE]
+
   
   ############################### Phase 4 ###############################################
   
+  # Calculate network centralities
+  
+  phase4_centralities_df <- run_phase4(phase3_interactions_df, centrality_list)
+  
+  phase4_centralities_df$Phase <- "III/IV"
+  
+  phase4_centralities_out_df <- merge(phase4_centralities_df, mapped_proteins, 
+                                      by.x = "Gene.Symbol", by.y = "Gene.Symbol")
+  colnames(phase4_centralities_out_df)[1] <- "Gene.Symbol"
+  
+  # Rearrange the columns
+  base_cols <- c("Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(phase4_centralities_out_df)) "IG")
+  cent_cols <- colnames(phase4_centralities_out_df)[2:((length(centrality_list)*4)+1)]
+  tail_cols <- "Phase"
+  final_cols <- c(base_cols, cent_cols, tail_cols)
+  
+  phase4_centralities_out_df <- phase4_centralities_out_df[, final_cols, drop = FALSE]
+  
+  message(paste0("#Genes in Phase4 (Centralities/Ensemble ranking) = ", nrow(phase4_centralities_df)))
+  
   # Ensemble ranking
-  
-  phase4_res <- run_phase4(phase3_centralities_out_df,cutoff, centrality_list, min_passCount)
-  
-  DiCE_genes_df <- phase4_res$DiCE_genes_df
-  phase4_centralities_df <- phase4_res$phase4_centralities_df
-  
-  message(paste0("#Genes in Phase 4 (",cutoff,") = ", nrow(DiCE_genes_df)))
-  
-  
-  ############################### Final ensemble ranking ################################
-  
-  
-  # Create final ensembl ranking
-  
-  dice_results_df <- createFinalRanking(dge_data, phase1_res, 
+  dice_results_df <- ensemble_Ranking(dge_data, phase1_res, 
                                       phase2_genes_df, 
-                                      phase4_centralities_df,
+                                      phase4_centralities_out_df,
                                       centrality_list)
   
+
+  ############################### Phase 5 ###############################################
+  
+  dice_results_df <- apply_dice_rules(
+    dice_results_df = dice_results_df,
+    dice_rules = dice_rules,
+    dice_logic = dice_logic
+  )
+  
+  dice_genes <- dice_results_df[dice_results_df$Phase == "DiCE",]$Gene.Symbol
+  rule_text <- format_dice_rules_text(dice_rules, dice_logic)
+  message(paste0("#Genes in Phase5 (", rule_text, ") = ", length(dice_genes)))
+
   # rename IG if the ig_method is weighted information gain
   if (tolower(ig_method) == "wig" && "IG" %in% colnames(dice_results_df)) {
     colnames(dice_results_df)[colnames(dice_results_df) == "IG"] <- "WIG"
@@ -372,16 +469,16 @@ perform_DiCE <- function(
   ############################### Return output ########################################
   
   # rename treatment and control column names to original names
-  colnames(interactions_withWeights_df) <- gsub("treatment", treatment, colnames(interactions_withWeights_df))
-  colnames(interactions_withWeights_df) <- gsub("control", control, colnames(interactions_withWeights_df))
+  colnames(phase3_interactions_df) <- gsub("treatment", treatment, colnames(phase3_interactions_df))
+  colnames(phase3_interactions_df) <- gsub("control", control, colnames(phase3_interactions_df))
   
-  if (data_type == "scRNA-seq"){
+  if (data_type == "scRNA-seq" & corr_mode == "ZINB-WaVE"){
     return(list(dice_results_df = dice_results_df,
-                interactions_df = interactions_withWeights_df,
+                interactions_df = phase3_interactions_df,
                 phase2_denoised_geneExp = filtered_denoised_geneExp))
   }
   
   return(list(dice_results_df = dice_results_df,
-         interactions_df = interactions_withWeights_df))
+         interactions_df = phase3_interactions_df))
 
 }

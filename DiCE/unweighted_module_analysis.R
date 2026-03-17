@@ -8,12 +8,14 @@
 #' @param species Character string indicating the organism
 #'   (\code{"human"} or \code{"mouse"}), used to load STRING reference files. Default = "human".
 #' @param seed Integer seed for reproducible community detection. Default is 123.
-#'
 #' @return A list with:
 #'   \itemize{
 #'     \item \code{summary_df}: Summary of number of modules and modularity
+#'     \item \code{module_stats_df}: Number of nodes and intra-module edges in each module
 #'     \item \code{membership_df}: Module assignments and within-module degrees
-#'     \item \code{edges_by_module}: List of intra-module interaction tables
+#'     \item \code{between_module_edges_df}: Number of inter-module edges connecting each pair of modules
+#'     \item \code{all_edges_df}: All retained edges with Gene1, Gene2, combined_score, Gene1_Module, and Gene2_Module
+#'     \item \code{edges_by_module}: List of intra-module interaction tables for each module
 #'   }
 #'
 #'@examples
@@ -41,18 +43,14 @@ detect_PPI_unweightedModules <- function(gene_list = list(),
   }
   
   # String db downloaded files
-  if(species == "human"){
+  if(tolower(species) == "human"){
     string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
-    #    string_protInfo_file <- system.file("extdata/stringDB_v12/human/9606.protein.info.v12.0.txt", package = "DiCE")
-    #    string_ppi_file <- system.file("extdata/stringDB_v12/human/9606.protein.links.v12.0.txt", package = "DiCE")
-    taxonID <- 9606
-  }else if(species == "mouse"){
+  }else if(tolower(species) == "mouse"){
     string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
-    #    string_protInfo_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt", package = "DiCE")
-    #    string_ppi_file <- system.file("extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt", package = "DiCE")
-    taxonID = 10090
+  }else{
+    stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }
   
   
@@ -119,37 +117,41 @@ detect_PPI_unweightedModules <- function(gene_list = list(),
   
   # 1) Build unweighted graph
   g <- graph_from_data_frame(interactions_unweighted, directed = FALSE)
-  g <- igraph::simplify(g, remove.multiple = TRUE, remove.loops = TRUE)
+  g <- simplify(g, remove.multiple = TRUE, remove.loops = TRUE)
   
   # 2) Louvain community detection (unweighted)
   cl_louvain <- cluster_louvain(g)
   memb <- membership(cl_louvain)
   
   # 3) Annotate edges with module IDs and keep only intra-module edges
-  edge_cols <- intersect(c("Gene1","Gene2","combined_score"), colnames(interactions))
-  edge_df <- interactions[, edge_cols, drop = FALSE]
-  edge_df$Module_Gene1 <- memb[edge_df$Gene1]
-  edge_df$Module_Gene2 <- memb[edge_df$Gene2]
+
+  # Annotate all edges with module IDs
+  edge_df <- interactions[, c("Gene1", "Gene2", "combined_score"), drop = FALSE]
+  edge_df$Module_Gene1 <- paste0("M", as.integer(memb[edge_df$Gene1]))
+  edge_df$Module_Gene2 <- paste0("M", as.integer(memb[edge_df$Gene2]))
   
+  # Intra-module edges only
   intra_df <- subset(edge_df, Module_Gene1 == Module_Gene2)
   intra_df$Module <- intra_df$Module_Gene1
-  intra_df$Module_Gene1 <- NULL
-  intra_df$Module_Gene2 <- NULL
   
-  # 4) Split intra-module interactions per module
-  edges_by_module <- split(intra_df[, edge_cols, drop = FALSE], intra_df$Module)
+  # Split intra-module interactions per module
+  edges_by_module <- split(
+    intra_df[, c("Gene1", "Gene2", "combined_score"), drop = FALSE],
+    intra_df$Module
+  )
   
-  # 5) Prepare summary + membership
+  # Summary df
   summary_df <- data.frame(
     Algorithm  = "Louvain",
-    n_modules  = length(sizes(cl_louvain)),
-    Modularity = modularity(g, memb),
+    Num_Modules  = length(igraph::sizes(cl_louvain)),
+    Modularity = igraph::modularity(g, memb),
     stringsAsFactors = FALSE
   )
   
+  # Membership df
   membership_df <- data.frame(
     Gene.Symbol   = names(memb),
-    Module = as.integer(memb),
+    Module = paste0("M", as.integer(memb)),
     stringsAsFactors = FALSE
   )
   
@@ -158,13 +160,50 @@ detect_PPI_unweightedModules <- function(gene_list = list(),
     node <- names(memb)[i]
     mod  <- memb[[i]]
     vs   <- names(memb[memb == mod])
-    subg <- induced_subgraph(g, vids = vs)
-    as.integer(degree(subg)[node])
+    subg <- igraph::induced_subgraph(g, vids = vs)
+    as.integer(igraph::degree(subg)[node])
   }, integer(1))
   
-  return(list(summary_df = summary_df,
-              membership_df = membership_df,
-              edges_by_module = edges_by_module))
+  # nodes and edges per module
+  nodes_per_module <- membership_df %>%
+    dplyr::group_by(Module) %>%
+    dplyr::summarise(Num_Nodes = dplyr::n(), .groups = "drop")
+  
+  edges_per_module <- intra_df %>%
+    dplyr::group_by(Module) %>%
+    dplyr::summarise(Num_Edges = dplyr::n(), .groups = "drop")
+  
+  module_stats_df <- dplyr::left_join(nodes_per_module, edges_per_module, by = "Module")
+  module_stats_df$Num_Edges[is.na(module_stats_df$Num_Edges)] <- 0
+  
+  # edges among modules
+  inter_df <- subset(edge_df, Module_Gene1 != Module_Gene2)
+  
+  if (nrow(inter_df) > 0) {
+    inter_df$Module_A <- pmin(inter_df$Module_Gene1, inter_df$Module_Gene2)
+    inter_df$Module_B <- pmax(inter_df$Module_Gene1, inter_df$Module_Gene2)
+    
+    between_module_edges_df <- inter_df %>%
+      dplyr::group_by(Module_A, Module_B) %>%
+      dplyr::summarise(Num_Edges = dplyr::n(), .groups = "drop") %>%
+      dplyr::arrange(Module_A, Module_B)
+  } else {
+    between_module_edges_df <- data.frame(
+      Module_A = character(0),
+      Module_B = character(0),
+      `Num_Edges (between modules)` = integer(0),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  return(list(
+    summary_df = summary_df,
+    module_stats_df = module_stats_df,
+    membership_df = membership_df,
+    between_module_edges_df = between_module_edges_df,
+    all_edges_df = edge_df,
+    edges_by_module = edges_by_module
+  ))
 }
 
 

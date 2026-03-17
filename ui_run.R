@@ -382,7 +382,7 @@ run_tab <- function() {
           )
         ),
         
-        # Phase IV – Centrality aggregation
+        # Phase IV – Centrality calculation
         div(
           style = "
             border:1px solid #e5e5e5;
@@ -408,7 +408,7 @@ run_tab <- function() {
               position:relative;
               margin-bottom:0;
             ",
-            "Phase IV – Centrality-based DiCE Filtering",
+            "Phase IV – Centrality Calculation",
             tags$span(class = "toggle-arrow")
           ),
           
@@ -417,55 +417,118 @@ run_tab <- function() {
             id = "phase4_panel",
             class = "collapse",
             style = "padding:15px;",
-                    
+            
             p(
               style = "margin-bottom:8px;",
-              "Perform network topology analysis and filter DiCE genes using centrality metrics."
+              "Calculate network centrality measures for the phenotype-specific PPI networks."
             ),
             
             fluidRow(
-              # Centrality measures
               column(
-                6,
+                12,
                 checkboxGroupInput(
                   "phase4_cents",
                   "Centrality measures",
                   choices = c(
-                    "Betweenness"   = "betweenness",
-                    "Eigenvector"   = "eigenvector",
-                    "Degree"        = "degree",
-                    "PageRank"      = "pagerank",
-                    "Closeness"     = "closeness",
-                    "Harmonic"      = "harmonic",
-                    "Authority"     = "authority",
-                    "Strength"      = "strength"
+                    "Betweenness" = "betweenness",
+                    "Eigenvector" = "eigenvector",
+                    "Degree"      = "degree",
+                    "PageRank"    = "pagerank",
+                    "Closeness"   = "closeness",
+                    "Harmonic"    = "harmonic",
+                    "Authority"   = "authority",
+                    "Strength"    = "strength"
                   ),
                   selected = c("betweenness", "eigenvector")
                 )
+              )
+            )
+          )
+        ),
+        # Phase V – DiCE rule filtering
+        div(
+          style = "
+    border:1px solid #e5e5e5;
+    border-radius:10px;
+    margin-bottom:12px;
+    padding:0;
+  ",
+          
+          tags$div(
+            class = "toggle-header collapsed",
+            `data-toggle` = "collapse",
+            `data-target` = "#phase5_panel",
+            role = "button",
+            `aria-expanded` = "false",
+            style = "
+      padding:12px 15px;
+      background-color:#f5f5f5;
+      border-radius:10px 10px 0 0;
+      cursor:pointer;
+      font-weight:600;
+      color:#004b4b;
+      position:relative;
+      margin-bottom:0;
+    ",
+            "Phase V – DiCE Rule Filtering",
+            tags$span(class = "toggle-arrow")
+          ),
+          
+          div(
+            id = "phase5_panel",
+            class = "collapse",
+            style = "padding:15px;",
+            
+            p(
+              style = "margin-bottom:12px;",
+              "Define DiCE selection using centrality-based rules, ensemble rank cutoff, or both."
+            ),
+            
+            radioButtons(
+              "phase5_selection_mode",
+              "DiCE selection mode",
+              choices = c(
+                "Centrality rule(s) only" = "centrality_only",
+                "Ensemble rank only" = "ensemble_only",
+                "Both centrality rule(s) and ensemble rank" = "both"
+              ),
+              selected = "centrality_only"
+            ),
+            
+            fluidRow(
+              column(
+                7,
+                
+                conditionalPanel(
+                  condition = "input.phase5_selection_mode == 'centrality_only' || input.phase5_selection_mode == 'both'",
+                  uiOutput("phase5_selected_centralities_ui"),
+                  br(),
+                  uiOutput("phase5_centrality_rules_ui")
+                )
               ),
               
-              # DiCE cutoff rule + K%
               column(
-                6,
-                selectInput(
-                  "phase4_dice_cutoff",
-                  "DiCE cutoff",
-                  choices = c(
-                    "Mean"    = "mean",
-                    "Median"   = "median",
-                    "Top K%"   = "topK"
-                  ),
-                  selected = "topK"
-                ),
+                5,
+                
                 conditionalPanel(
-                  "input.phase4_dice_cutoff == 'topK'",
+                  condition = "input.phase5_selection_mode == 'ensemble_only' || input.phase5_selection_mode == 'both'",
                   numericInput(
-                    "phase4_topK",
-                    "K (%) for top K% cutoff",
-                    value = 25,
-                    min   = 1,
-                    max   = 100,
-                    step  = 1
+                    "phase5_ensemble_rank",
+                    "Top K ensemble rank cutoff",
+                    value = 200,
+                    min = 1,
+                    step = 1
+                  )
+                ),
+                
+                conditionalPanel(
+                  condition = "input.phase5_selection_mode == 'centrality_only' || input.phase5_selection_mode == 'both'",
+                  radioButtons(
+                    "phase5_dice_logic",
+                    "How to combine multiple rules",
+                    choices = c("AND" = "and", "OR" = "or"),
+                    selected = "and",
+                    inline = TRUE
                   )
                 )
               )

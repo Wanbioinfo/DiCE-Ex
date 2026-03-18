@@ -1180,32 +1180,35 @@ server <- function(input, output, session) {
   expr_path <- reactiveVal(NULL)
   dge_path  <- reactiveVal(NULL)
   
-  observeEvent(input$expr_file, {
-    req(input$expr_file)
-    req(input$expr_file$datapath)
-    req(nzchar(input$expr_file$datapath))
-    
-    path <- input$expr_file$datapath
-    req(file.exists(path))
-    
-    ext <- tolower(tools::file_ext(input$expr_file$name))
-    expr_tbl <- switch(
-      ext,
-      "csv"  = readr::read_csv(path, show_col_types = FALSE),
-      "tsv"  = readr::read_tsv(path,  show_col_types = FALSE),
-      "txt"  = readr::read_tsv(path,  show_col_types = FALSE),
-      "xls"  = readxl::read_excel(path),
-      "xlsx" = readxl::read_excel(path),
-      "rds"  = {
-        obj <- readRDS(path)
-        if (is.matrix(obj)) obj <- as.data.frame(obj)
-        if (!is.data.frame(obj)) stop("Expression RDS must contain a data frame or matrix.")
-        obj
-      },
-      readr::read_delim(path, delim = NULL, show_col_types = FALSE)
-    )
-    expr_df(as.data.frame(expr_tbl))
-  })
+observeEvent(input$expr_file, {
+  req(input$expr_file)
+  req(input$expr_file$datapath)
+  req(nzchar(input$expr_file$datapath))
+  
+  path <- input$expr_file$datapath
+  req(file.exists(path))
+  
+  expr_path(path)
+  
+  ext <- tolower(tools::file_ext(input$expr_file$name))
+  expr_tbl <- switch(
+    ext,
+    "csv"  = readr::read_csv(path, show_col_types = FALSE),
+    "tsv"  = readr::read_tsv(path,  show_col_types = FALSE),
+    "txt"  = readr::read_tsv(path,  show_col_types = FALSE),
+    "xls"  = readxl::read_excel(path),
+    "xlsx" = readxl::read_excel(path),
+    "rds"  = {
+      obj <- readRDS(path)
+      if (is.matrix(obj)) obj <- as.data.frame(obj)
+      if (!is.data.frame(obj)) stop("Expression RDS must contain a data frame or matrix.")
+      obj
+    },
+    readr::read_delim(path, delim = NULL, show_col_types = FALSE)
+  )
+  expr_df(as.data.frame(expr_tbl))
+})
+
   
   observeEvent(input$dge_file, {
     req(input$dge_file)

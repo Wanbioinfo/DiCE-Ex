@@ -1180,7 +1180,6 @@ server <- function(input, output, session) {
   expr_path <- reactiveVal(NULL)
   dge_path  <- reactiveVal(NULL)
   
-<<<<<<< HEAD
   observeEvent(input$expr_file, {
     req(input$expr_file)
     req(input$expr_file$datapath)

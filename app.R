@@ -1188,6 +1188,8 @@ server <- function(input, output, session) {
     path <- input$expr_file$datapath
     req(file.exists(path))
     
+    expr_path(path)
+    
     ext <- tolower(tools::file_ext(input$expr_file$name))
     expr_tbl <- switch(
       ext,
@@ -1206,6 +1208,7 @@ server <- function(input, output, session) {
     )
     expr_df(as.data.frame(expr_tbl))
   })
+  
   
   observeEvent(input$dge_file, {
     req(input$dge_file)
@@ -1328,20 +1331,65 @@ server <- function(input, output, session) {
   output$dice_table <- DT::renderDT({
     df <- dice_table_data()
     req(df)
-    
-    # Identify which column contains HTML links
-    gene_col <- attr(df, "gene_col_linked")
-    gene_idx <- if (!is.null(gene_col) && gene_col %in% names(df)) which(names(df) == gene_col) else NULL
-    
-    # Escape everything except the gene column
-    escape_cols <- if (!is.null(gene_idx)) setdiff(seq_along(df), gene_idx) else TRUE
-    
+  
+    df_show <- df
+  
+    gene_col <- attr(df_show, "gene_col_linked")
+    gene_idx <- if (!is.null(gene_col) && gene_col %in% names(df_show)) which(names(df_show) == gene_col) else NULL
+  
+    num_cols <- names(df_show)[vapply(df_show, is.numeric, logical(1))]
+  
+    # Adjust these if your column names differ
+    sci_cols <- intersect(
+      c("adj.P.Val", "P.Value", "adj.PVal", "PValue", "padj", "pvalue"),
+      names(df_show)
+    )
+  
+    int_cols <- intersect(
+      c("Betweenness_rank", "EigenVector_rank", "Pass_Count", "Ensemble_Rank",
+        "ProductRank", "pass_count", "Ensemble.Rank"),
+      names(df_show)
+    )
+  
+    fmt_sci <- function(x) {
+      ifelse(is.na(x), NA_character_, format(x, scientific = TRUE, digits = 2, trim = TRUE))
+    }
+  
+    fmt_int <- function(x) {
+      ifelse(is.na(x), NA_character_, as.character(round(x)))
+    }
+  
+    fmt_2dec <- function(x) {
+      ifelse(is.na(x), NA_character_, sprintf("%.2f", x))
+    }
+  
+    # First apply 2-decimal formatting to all numeric columns
+    for (col in num_cols) {
+      df_show[[col]] <- fmt_2dec(df_show[[col]])
+    }
+  
+    # Override with scientific notation for p-value-like columns
+    for (col in sci_cols) {
+      df_show[[col]] <- fmt_sci(df[[col]])
+    }
+  
+    # Override with integer formatting for rank/count columns
+    for (col in int_cols) {
+      df_show[[col]] <- fmt_int(df[[col]])
+    }
+  
+    escape_cols <- if (!is.null(gene_idx)) setdiff(seq_along(df_show), gene_idx) else TRUE
+  
     DT::datatable(
-      df,
-      filter   = "none",
+      df_show,
+      filter = "none",
       rownames = FALSE,
-      escape   = escape_cols,
-      options  = list(dom = "lrtip", pageLength = 20, scrollX = TRUE),
+      escape = escape_cols,
+      options = list(
+        dom = "lrtip",
+        pageLength = 20,
+        scrollX = TRUE
+      ),
       selection = "none"
     )
   })
@@ -2115,7 +2163,8 @@ server <- function(input, output, session) {
               corr_pval_cutoff      = 1,
               centrality_list       = params$centralities,
               dice_rules            = params$dice_rules,
-              dice_logic            = params$dice_logic
+              dice_logic            = params$dice_logic,
+              remove_pc_genes  = FALSE
             )
             
             
@@ -2365,9 +2414,27 @@ server <- function(input, output, session) {
       if (nrow(row) == 0) {
         stats_html <- tags$em("No differential gene expression analysis statistics found for this gene.")
       } else {
-        logFC <- if ("logFC" %in% names(row)) signif(row$logFC[1], 4) else NA
-        pval  <- if ("P.Value" %in% names(row)) signif(row$P.Value[1], 4) else if ("pvalue" %in% names(row)) signif(row$pvalue[1], 4) else NA
-        padj  <- if ("adj.P.Val" %in% names(row)) signif(row$adj.P.Val[1], 4) else if ("adjp" %in% names(row)) signif(row$adjp[1], 4) else NA
+        logFC <- if ("logFC" %in% names(row)) {
+          sprintf("%.2f", row$logFC[1])
+        } else {
+          NA
+        }
+        
+        pval <- if ("P.Value" %in% names(row)) {
+          format(row$P.Value[1], scientific = TRUE, digits = 2, trim = TRUE)
+        } else if ("pvalue" %in% names(row)) {
+          format(row$pvalue[1], scientific = TRUE, digits = 2, trim = TRUE)
+        } else {
+          NA
+        }
+        
+        padj <- if ("adj.P.Val" %in% names(row)) {
+          format(row$adj.P.Val[1], scientific = TRUE, digits = 2, trim = TRUE)
+        } else if ("adjp" %in% names(row)) {
+          format(row$adjp[1], scientific = TRUE, digits = 2, trim = TRUE)
+        } else {
+          NA
+        }
         
         stats_html <- tags$div(
           tags$h4("Differential Expression Statistics"),

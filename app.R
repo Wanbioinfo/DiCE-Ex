@@ -98,7 +98,6 @@ dir.create(jobs_root, showWarnings = FALSE, recursive = TRUE)
 
 job_dir <- function(job_id) file.path(jobs_root, job_id)
 
-print(job_dir)
 
 write_status <- function(job_id, state, message = "", step = NULL, pct = NULL, job_title = NULL) {
   d <- job_dir(job_id)
@@ -708,7 +707,7 @@ server <- function(input, output, session) {
       read_status(jid)
     }
   )
-
+  
   
   ################################
   ## 1. Navigation
@@ -731,6 +730,16 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "main_nav", selected = "about")
   })
   
+  output$modules_loading_ui <- renderUI({
+    if (!isTRUE(modules_loading())) return(NULL)
+    
+    div(
+      class = "phase-summary",
+      style = "border-left:5px solid #0d6efd; background:#f4f8ff;",
+      tags$p(tags$b("Loading module results...")),
+      tags$p("Please wait while module tables and network data are prepared.")
+    )
+  })
   
   output$expr_loaded_badge <- renderUI({
     req(expr_df())
@@ -926,6 +935,29 @@ server <- function(input, output, session) {
   modules_between_edges <- reactiveVal(NULL)
   all_module_edges <- reactiveVal(NULL)
   
+  modules_loading <- reactiveVal(FALSE)
+  
+  load_heavy_module_objects <- function(jid) {
+    if (is.null(jid) || !nzchar(jid)) return(invisible(NULL))
+    
+    jd <- job_dir(jid)
+    modules_loading(TRUE)
+    on.exit(modules_loading(FALSE), add = TRUE)
+    
+    if (is.null(modules_edges())) {
+      f4 <- file.path(jd, "modules_edges.rds")
+      if (file.exists(f4)) modules_edges(readRDS(f4))
+    }
+    
+    if (is.null(all_module_edges())) {
+      f9 <- file.path(jd, "all_module_edges.rds")
+      if (file.exists(f9)) all_module_edges(readRDS(f9))
+    }
+    
+    invisible(NULL)
+  }
+  
+  
   ################################
   ## 3b. Download readiness flag  <-- PUT IT HERE
   ################################
@@ -1102,6 +1134,15 @@ server <- function(input, output, session) {
   
   loaded_once <- reactiveVal(FALSE)
   
+  observeEvent(input$mm_module_filter, {
+    jid <- job_id_qs()
+    req(jid)
+    
+    if (is.null(modules_edges())) {
+      load_heavy_module_objects(jid)
+    }
+  }, ignoreInit = TRUE)
+  
   observeEvent(list(job_status(), job_id_qs()), {
     st  <- job_status()
     jid <- job_id_qs()
@@ -1120,6 +1161,9 @@ server <- function(input, output, session) {
     if (identical(st$state, "finished") && !identical(loaded_job_id(), jid)) {
       jd <- job_dir(jid)
       
+      modules_loading(TRUE)
+      on.exit(modules_loading(FALSE), add = TRUE)
+      
       f1 <- file.path(jd, "dice_result.rds")
       if (file.exists(f1)) dice_result(readRDS(f1))
       
@@ -1129,8 +1173,9 @@ server <- function(input, output, session) {
       f3 <- file.path(jd, "modules_membership.rds")
       if (file.exists(f3)) modules_membership(readRDS(f3))
       
-      f4 <- file.path(jd, "modules_edges.rds")
-      if (file.exists(f4)) modules_edges(readRDS(f4))
+      # DO NOT load heavy module edge objects yet
+      modules_edges(NULL)
+      all_module_edges(NULL)
       
       f5 <- file.path(jd, "expr_input.rds")
       if (file.exists(f5)) expr_df(readRDS(f5))
@@ -1141,8 +1186,7 @@ server <- function(input, output, session) {
         dge_saved <- as.data.frame(dge_saved)
         dge_saved <- normalize_dge_cols(dge_saved)
         dge_df(dge_saved)
-      
-        # overwrite old saved file so future loads are already fixed
+        
         saveRDS(dge_saved, f6)
       }
       
@@ -1160,9 +1204,6 @@ server <- function(input, output, session) {
         }
       }
       
-      f9 <- file.path(jd, "all_module_edges.rds")
-      if (file.exists(f9)) all_module_edges(readRDS(f9))
-      
       log_file <- file.path(jd, "log.txt")
       if (file.exists(log_file)) {
         log_lines <- tryCatch(readLines(log_file, warn = FALSE), error = function(e) character(0))
@@ -1171,6 +1212,7 @@ server <- function(input, output, session) {
       }
       
       loaded_job_id(jid)
+      modules_loading(FALSE)
     }
   }, ignoreInit = FALSE)
   
@@ -1536,8 +1578,14 @@ server <- function(input, output, session) {
       ms <- modules_stats()
       be <- modules_between_edges()
       m  <- modules_membership()
-      ae <- all_module_edges()
-      req(s, ms, be, m, ae)
+      req(s, ms, be, m)
+      
+      jid <- job_id_qs()
+      req(jid)
+      
+      ae_file <- file.path(job_dir(jid), "all_module_edges.rds")
+      req(file.exists(ae_file))
+      ae <- readRDS(ae_file)
       
       wb <- openxlsx::createWorkbook()
       
@@ -1610,16 +1658,22 @@ server <- function(input, output, session) {
   module_edges <- reactive({
     edges_list <- modules_edges()
     req(edges_list)
+    
     mid <- selected_module_id()
     
     if (identical(mid, "all")) {
       all_edges <- bind_rows(lapply(edges_list, function(x) as.data.frame(x, stringsAsFactors = FALSE)))
-      if (nrow(all_edges) == 0) return(data.frame(Gene1=character(), Gene2=character(), stringsAsFactors=FALSE))
+      if (nrow(all_edges) == 0) {
+        return(data.frame(Gene1 = character(), Gene2 = character(), stringsAsFactors = FALSE))
+      }
       return(all_edges)
     }
     
     ed <- edges_list[[as.character(mid)]]
-    if (is.null(ed)) return(data.frame(Gene1=character(), Gene2=character(), stringsAsFactors=FALSE))
+    if (is.null(ed)) {
+      return(data.frame(Gene1 = character(), Gene2 = character(), stringsAsFactors = FALSE))
+    }
+    
     as.data.frame(ed, stringsAsFactors = FALSE)
   })
   
@@ -2186,9 +2240,9 @@ server <- function(input, output, session) {
             dice_genes <- dice_genes_df$Gene.Symbol
             
             modules <- detect_PPI_unweightedModules(
-              gene_list     = dice_genes,
-              species       = params$species,
-              seed          = 123
+              gene_list       = dice_genes,
+              interactions_df = phase3_interactions,
+              seed            = 123
             )
             write_status(job_id, "running",
                          message="Saving outputs…",

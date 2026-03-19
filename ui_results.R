@@ -79,10 +79,16 @@ results_tab <- function() {
         tabPanel(
           "DiCE PPI modules",
           
+          br(),
+          
+          uiOutput("modules_loading_ui"),
+          
           div(
             style = "margin-bottom:12px;",
             uiOutput("download_modules_ui")
           ),
+          
+          br(),
           
           h3("Module statistics"),
           div(

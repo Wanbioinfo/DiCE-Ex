@@ -265,9 +265,16 @@ dice_res <- perform_DiCE(
 
 result_df <- as.data.frame(dice_res$dice_results_df)
 phase3_interactions <- as.data.frame(dice_res$interactions_df)
-out_xlsx  <- file.path(opt$outdir, paste0(opt$job_name, "_dice_results.xlsx"))
-openxlsx::write.xlsx(result_df, out_xlsx, rowNames = FALSE)
-message("Saved DiCE results: ", out_xlsx)
+
+out_xlsx <- file.path(opt$outdir, paste0(opt$job_name, "_dice_results.xlsx"))
+wb <- openxlsx::createWorkbook()
+openxlsx::addWorksheet(wb, "DiCE_results")
+openxlsx::writeData(wb, "DiCE_results", result_df)
+openxlsx::addWorksheet(wb, "Phase3_interactions")
+openxlsx::writeData(wb, "Phase3_interactions", phase3_interactions)
+openxlsx::saveWorkbook(wb, out_xlsx, overwrite = TRUE)
+
+message("Saved DiCE results and Phase III interactions: ", out_xlsx)
 
 # ---------- Optional: module detection ----------
 if (isTRUE(opt$run_modules)) {
@@ -287,17 +294,29 @@ if (isTRUE(opt$run_modules)) {
   dice_genes <- as.character(dice_genes_df[[gene_col]])
   
   modules <- detect_PPI_unweightedModules(
-    gene_list = dice_genes,
-    species   = species,
-    seed      = 123
+    gene_list       = dice_genes,
+    interactions_df = phase3_interactions,
+    seed            = 123
   )
   
   mod_xlsx <- file.path(opt$outdir, paste0(opt$job_name, "_modules.xlsx"))
   wb <- openxlsx::createWorkbook()
+  
   openxlsx::addWorksheet(wb, "Module summary")
   openxlsx::writeData(wb, "Module summary", as.data.frame(modules$summary_df))
+  
+  openxlsx::addWorksheet(wb, "Module statistics")
+  openxlsx::writeData(wb, "Module statistics", as.data.frame(modules$module_stats_df))
+  
+  openxlsx::addWorksheet(wb, "Between-module edges")
+  openxlsx::writeData(wb, "Between-module edges", as.data.frame(modules$between_module_edges_df))
+  
   openxlsx::addWorksheet(wb, "Module membership")
   openxlsx::writeData(wb, "Module membership", as.data.frame(modules$membership_df))
+  
+  openxlsx::addWorksheet(wb, "All edges")
+  openxlsx::writeData(wb, "All edges", as.data.frame(modules$all_edges_df))
+  
   openxlsx::saveWorkbook(wb, mod_xlsx, overwrite = TRUE)
   
   message("Saved modules: ", mod_xlsx)

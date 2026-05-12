@@ -16,10 +16,10 @@ calculate_correlation <- function(class_geneExp, corr_method, corr_mode, corr_pv
   if(corr_mode == "directCorr"){
     corr_matrix <- traditional_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
-  }else if (corr_mode == "remove_Zerocells"){
+  }else if (corr_mode == "remove_zerocells"){
     corr_matrix <- remove_Zerocells_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
-  }else if (corr_mode == "ZINB-WaVE"){
+  }else if (tolower(corr_mode) %in% c("zinbwave", "newwave")){
     corr_matrix <- traditional_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
   }else{
@@ -139,10 +139,22 @@ getNetworkGene_expression <- function(geneExp_data,mapped_proteins){
 #' @param string_protInfo_file Filepath of the StringDB protein information file
 #' @param string_ppi_file Filepath of the StringDB PPI file
 #' @param phase2_res Dataframe of Phase 2 results
-#'
+#' @param stringDB_confidence Cutoff for confidence score in Stringdb PPI (Default is 400).
 #' @return Dataframe of PPIs 
 #' @return Dataframe of vertices with the Gene.Symbol and String_ID
 #' @noRd
-extract_PPI <- function(string_protInfo_file, string_ppi_file, phase2_res){
-  return(create_PPI_fromPhase2(string_protInfo_file, string_ppi_file, phase2_res))
+extract_stringdb_PPI <- function(string_protInfo_file, string_ppi_file, stringDB_confidence = 400, phase2_res){
+  return(create_stringPPI_fromPhase2(string_protInfo_file, string_ppi_file, stringDB_confidence, phase2_res))
+}
+
+#' Run Call create_PPI: Call the function to create PPI from Phase2 genes
+#' Helper function (not for users)
+#'
+#' @param biogrid_ppi_file Filepath of the BioGrid PPI file
+#' @param phase2_res Dataframe of Phase 2 results
+#' @return Dataframe of PPIs 
+#' @return Dataframe of vertices with the Gene.Symbol and String_ID
+#' @noRd
+extract_biogrid_PPI <- function(biogrid_ppi_file, phase2_res){
+  return(create_biogridPPI_fromPhase2(biogrid_ppi_file, phase2_res))
 }

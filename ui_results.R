@@ -85,19 +85,25 @@ results_tab <- function() {
           
           div(
             style = "margin-bottom:12px;",
-            uiOutput("download_modules_ui")
+            uiOutput("download_module_buttons_ui")
           ),
           
           br(),
+          tags$hr(),
           
-          h3("Module statistics"),
+          
+          h3("Modules from unweighted PPI"),
+          
+          tags$hr(),
+          
+          h4("Module statistics"),
           div(
             style = "max-width:720px;",
             DT::DTOutput("modules_stats_table")
           ),
           br(),
           
-          h3("Module membership & module subnetwork"),
+          h4("Module membership & module subnetwork"),
           helpText(
             "Use the module selector or the search box to filter rows. Click a gene row to visualize its subnetwork (within its module) on the right."
           ),

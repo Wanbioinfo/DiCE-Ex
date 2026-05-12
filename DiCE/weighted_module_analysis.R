@@ -5,13 +5,25 @@
 #' compares module overlap and node-level module roles between conditions.
 #'
 #' @param gene_list Character vector of genes to retain in the networks.
-#' @param interactions_df Data frame of interactions with `source`, `target`, and
+#' @param interactions Data frame of interactions with `source`, `target`, and
 #' condition-specific weight columns named `weight_<condition>` (e.g., `weight_Tumor`).
 #' @param treatment Character string naming the treatment condition (used to select
 #' `weight_<treatment>`. E.g., "Tumor").
 #' @param control Character string naming the control condition (used to select
 #' `weight_<control>`. E.g., "Normal").
-#' @param louvain_resolution  Resolution parameter for computing modularity in Louvain algorithm (default 1).
+#' @param algorithm Character. Community detection algorithm to use.
+#'   Options are "louvain" (default) or "leiden". Louvain is fast and widely used,
+#'   while Leiden provides improved partition quality and guarantees well-connected communities.
+#' @param resolution Numeric. Resolution parameter controlling the granularity of detected modules.
+#'   Higher values lead to more (smaller) modules, while lower values result in fewer (larger) modules.
+#'   Default is 1.
+#' @param leiden_itrs Integer. Number of iterations for the Leiden algorithm.
+#'   More iterations can improve stability and quality of community detection,
+#'   but increase computation time. Default is 3.
+#' @param leiden_beta Numeric. Randomness parameter for the Leiden algorithm.
+#'   Controls the level of randomness during node reassignment.
+#'   Higher values introduce more randomness, potentially escaping local optima.
+#'   Default is 0.01.
 #' @param seed Random seed for reproducibility (default 123).
 #'
 #' @return A list with:
@@ -27,10 +39,11 @@
 #' \dontrun{
 #' res <- detect_PPI_weightedModules(
 #'   gene_list = my_genes,
-#'   interactions_df = intr_df,
+#'   interactions = intr_df,
 #'   treatment = "Tumor",
 #'   control = "Normal",
-#'   louvain_resolution = 0.9,
+#'   algorithm = "louvain",
+#'   resolution = 0.9,
 #'   seed = 123
 #' )
 #' 
@@ -41,10 +54,13 @@
 #'
 #' @export
 detect_PPI_weightedModules <- function(gene_list = list(),
-                                       interactions_df = NULL,
+                                       interactions = NULL,
                                        treatment = NULL,
                                        control = NULL,
-                                       louvain_resolution = 1,
+                                       algorithm = "louvain",
+                                       resolution = 1,
+                                       leiden_itrs = 3,
+                                       leiden_beta = 0.01,
                                        seed = 123)
 {
   
@@ -52,14 +68,14 @@ detect_PPI_weightedModules <- function(gene_list = list(),
     stop("Missing gene list!")
   }
   
-  if (is.null(interactions_df)){
+  if (is.null(interactions)){
     stop("Missing interactions data!")
   }
   
-  interactions_df <- dplyr::rename(interactions_df, Gene1 = source, Gene2 = target)
+  interactions <- dplyr::rename(interactions, Gene1 = source, Gene2 = target)
   
   # Keep only interactions where both genes are in the given gene_list
-  keep_interactions <- subset(interactions_df,
+  keep_interactions <- subset(interactions,
                          Gene1 %in% gene_list & Gene2 %in% gene_list)
   
   # create weighted graphs separately for treatment and control data
@@ -67,12 +83,22 @@ detect_PPI_weightedModules <- function(gene_list = list(),
   control_intrs <- filter_weightedEdges(keep_interactions, control)
   
   # Detect network communities for treatment and control networks
-  treatment_comDetection <- detect_communities(treatment_intrs,louvain_resolution)
+  treatment_comDetection <- detect_communities(treatment_intrs,
+                                               algorithm,
+                                               resolution,
+                                               leiden_itrs,
+                                               leiden_beta,
+                                               seed)
   treatment_graph <- treatment_comDetection$graph
   treatment_communities <- treatment_comDetection$communities
   treatment_membs <- treatment_comDetection$membership
   
-  control_comDetection <- detect_communities(control_intrs,louvain_resolution)
+  control_comDetection <- detect_communities(control_intrs,
+                                             algorithm,
+                                             resolution,
+                                             leiden_itrs,
+                                             leiden_beta,
+                                             seed)
   control_graph <- control_comDetection$graph
   control_communities <- control_comDetection$communities
   control_membs <- control_comDetection$membership
@@ -94,12 +120,28 @@ detect_PPI_weightedModules <- function(gene_list = list(),
   control_summary_df$Condition   <- control
   
   combined_summary_df <- dplyr::bind_rows(treatment_summary_df, control_summary_df)
+  combined_summary_df$Algorithm <- ifelse(
+    tolower(algorithm) == "louvain",
+    "Louvain",
+    "Leiden"
+  )
   
   # Module summaries
   treatment_modSummary <- summarize_modules(treatment_comDetection, treatment)
   control_modSummary <- summarize_modules(control_comDetection, control)
   
+  # Rename modules by observed/expected intra-module edge ratio
+  treatment_rename <- rename_modules_by_OE(treatment_modSummary, treatment)
+  control_rename   <- rename_modules_by_OE(control_modSummary, control)
+  
+  treatment_map <- treatment_rename$module_map
+  control_map   <- control_rename$module_map
+  
+  treatment_modSummary <- treatment_rename$module_stats_df
+  control_modSummary   <- control_rename$module_stats_df
+  
   combined_modSummary <- dplyr::bind_rows(treatment_modSummary, control_modSummary)
+  
   
   # Analysis 1 - Calculate jaccard score between modules
   cmp1 <- compare_ConditionModules(treatment_membs, control_membs)
@@ -112,6 +154,30 @@ detect_PPI_weightedModules <- function(gene_list = list(),
   rownames(cmp_count) <- sub("^Treatment", treatment, rownames(cmp_count))
   colnames(cmp_count) <- sub("^Control", control, colnames(cmp_count))
   
+  rownames(cmp_jaccard) <- treatment_map[rownames(cmp_jaccard)]
+  colnames(cmp_jaccard) <- control_map[colnames(cmp_jaccard)]
+  
+  # Order rows
+  row_order <- order(as.numeric(sub(".*_M", "", rownames(cmp_jaccard))))
+  cmp_jaccard <- cmp_jaccard[row_order, , drop = FALSE]
+  
+  # Order columns
+  col_order <- order(as.numeric(sub(".*_M", "", colnames(cmp_jaccard))))
+  cmp_jaccard <- cmp_jaccard[, col_order, drop = FALSE]
+  
+  rownames(cmp_count) <- treatment_map[rownames(cmp_count)]
+  colnames(cmp_count) <- control_map[colnames(cmp_count)]
+  
+  # Order modules numerically and add module sizes
+  
+  # Order rows
+  row_order <- order(as.numeric(sub(".*_M", "", rownames(cmp_count))))
+  cmp_count <- cmp_count[row_order, , drop = FALSE]
+  
+  # Order columns
+  col_order <- order(as.numeric(sub(".*_M", "", colnames(cmp_count))))
+  cmp_count <- cmp_count[, col_order, drop = FALSE]
+  
   
   # Analysis 2 - Node features in each module
   nodes_treatment <- node_moduleInfo(treatment_comDetection, treatment, weight_attr = "weight")
@@ -119,6 +185,14 @@ detect_PPI_weightedModules <- function(gene_list = list(),
   
   nodes_combined <- full_join(nodes_treatment, nodes_control, by = "Gene.Symbol", 
                            suffix = c(paste0("_",treatment), paste0("_",control)))
+  
+  # Apply new module names to node statistics
+  nodes_combined[[paste0("Module_", treatment)]] <-
+    treatment_map[nodes_combined[[paste0("Module_", treatment)]]]
+  
+  nodes_combined[[paste0("Module_", control)]] <-
+    control_map[nodes_combined[[paste0("Module_", control)]]]
+  
   
   
   # Analysis 3 - get all interactions with modules information and edge weights
@@ -131,9 +205,26 @@ detect_PPI_weightedModules <- function(gene_list = list(),
     
   )]
   
+  # Apply new module names to edges_with_modules
+  edges_with_modules[[paste0("Module_Gene1_", treatment)]] <-
+    treatment_map[edges_with_modules[[paste0("Module_Gene1_", treatment)]]]
+  
+  edges_with_modules[[paste0("Module_Gene2_", treatment)]] <-
+    treatment_map[edges_with_modules[[paste0("Module_Gene2_", treatment)]]]
+  
+  edges_with_modules[[paste0("Module_Gene1_", control)]] <-
+    control_map[edges_with_modules[[paste0("Module_Gene1_", control)]]]
+  
+  edges_with_modules[[paste0("Module_Gene2_", control)]] <-
+    control_map[edges_with_modules[[paste0("Module_Gene2_", control)]]]
+  
+
   # Analysis 4 - condition specific intermodule connectivity
   treatment_interMod <- inter_module_connectivity(edges_with_modules, treatment)
   control_interMod <- inter_module_connectivity(edges_with_modules, control)
+  
+
+  
   
   return(list(network_modules = combined_summary_df,
               module_stats = combined_modSummary,

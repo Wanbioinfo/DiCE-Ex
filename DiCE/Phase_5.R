@@ -181,8 +181,7 @@ evaluate_dice_rule <- function(df, rule) {
 #' @noRd
 apply_dice_rules <- function(dice_results_df, dice_rules, dice_logic = c("AND", "OR")) {
   
-  dice_logic <- toupper(as.character(dice_logic)[1])
-  dice_logic <- match.arg(dice_logic, c("AND", "OR"))
+  dice_logic <- match.arg(dice_logic)
   
   if (length(dice_rules) == 0) {
     stop("dice_rules cannot be empty")
@@ -290,8 +289,7 @@ format_dice_rule <- function(rule) {
 #' @return A character string describing the combined DiCE rules.
 #' @noRd
 format_dice_rules_text <- function(dice_rules, dice_logic = c("AND", "OR")) {
-  dice_logic <- toupper(as.character(dice_logic)[1])
-  dice_logic <- match.arg(dice_logic, c("AND", "OR"))
+  dice_logic <- match.arg(dice_logic)
   
   rule_txt <- vapply(dice_rules, format_dice_rule, character(1))
   

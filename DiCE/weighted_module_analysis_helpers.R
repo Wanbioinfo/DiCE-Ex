@@ -1,3 +1,40 @@
+#' Build reproducible undirected graph
+#'
+#' Creates an igraph object from an edge list with deterministic ordering.
+#' Removes duplicate edges and self-loops, and fixes vertex order for reproducibility.
+#'
+#' @param edges Data frame with columns `Gene1`, `Gene2` and `weight`.
+#' @return igraph object
+#' @noRd
+make_graph_repro <- function(edges){
+  edges <- edges[order(edges$Gene1, edges$Gene2), ]
+  
+  # Build graph with weights (assumes column name = "weight")
+  g <- igraph::graph_from_data_frame(edges, directed = FALSE)
+  
+  # Ensure weight attribute exists
+  if (!"weight" %in% colnames(edges)) {
+    stop("Input edges must contain a 'weight' column.")
+  }
+  
+  E(g)$weight <- edges$weight
+  
+  # Simplify: combine duplicate edges by taking mean weights
+  if ("simplify" %in% names(formals(simplify))) {
+    g <- simplify(g, edge.attr.comb = list(weight = "mean"))
+  } else {
+    g <- igraph::simplify(g, edge.attr.comb = list(weight = "mean"))
+  }
+  
+  # Reproducible vertex order
+  if (!is.null(V(g)$name)) {
+    g <- igraph::permute(g, order(V(g)$name))
+  }
+  
+  return(g)
+}
+
+
 #' Extract condition-specific weighted edges
 #'
 #' Internal helper to select the edge weight column for a given condition
@@ -32,9 +69,12 @@ filter_weightedEdges <- function(all_edges, condition) {
 #'
 #' @return List containing the igraph object, detected communities, and node membership.
 #' @noRd
-detect_communities <- function(interactions = interactions,
-                               louvain_resolution = louvain_resolution,
-                               seed = 123){
+detect_communities <- function(interactions,
+                               algorithm,
+                               resolution,
+                               leiden_itrs,
+                               leiden_beta,
+                               seed){
   RNGkind(kind = "Mersenne-Twister", normal.kind = "Inversion", sample.kind = "Rejection")
   set.seed(seed)
   
@@ -42,17 +82,36 @@ detect_communities <- function(interactions = interactions,
   interactions$weight <- abs(as.numeric(interactions$weight))
   
   # Build weighted graph
+  # graph <- make_graph_repro(interactions)
+
   graph <- graph_from_data_frame(interactions, directed = FALSE)
-  graph <- simplify(graph)
+  graph <- simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
   
-  # Louvain community detection
-  cl_louvain <- cluster_louvain(graph, 
-                                weights = E(graph)$weight,
-                                resolution = louvain_resolution)
-  memb <- membership(cl_louvain)
+  # Community detection
+  if (tolower(algorithm) == "louvain"){
+    # 2) Louvain community detection (unweighted)
+    cl_obj <- cluster_louvain(graph = graph,
+                              weights = E(graph)$weight,
+                              resolution = resolution)
+    memb <- membership(cl_obj)
+    
+  }else if (tolower(algorithm) == "leiden"){
+    # 2) Leiden community detection (unweighted)
+    cl_obj <- cluster_leiden(graph = graph,
+                             weights = E(graph)$weight,
+                             objective_function = "modularity",   
+                             resolution = resolution,
+                             n_iterations = leiden_itrs,
+                             beta = leiden_beta)
+    memb <- membership(cl_obj)
+    
+  }else{
+    stop("Invalid alogrithm for community detection. Use 'louvain', 'leiden'.")
+  }
+  
   
   return(list(graph = graph,
-              communities = cl_louvain,
+              communities = cl_obj,
               membership = memb))
   
 }
@@ -259,7 +318,7 @@ calculate_node_stats <- function(g, comm, condition, weight_attr = "weight") {
 
   
   # weighted adjacency (sparse)
-  adj <- as_adj(g, sparse = TRUE, attr = weight_attr)
+  adj <- as_adjacency_matrix(g, sparse = TRUE, attr = weight_attr)
   
   # total weighted degree (strength)
   k_total <- Matrix::rowSums(adj)
@@ -367,4 +426,49 @@ inter_module_connectivity <- function(edges_with_modules, condition){
     )
   
   return(inter_module_summary)
+}
+
+
+#' Rename modules by observed/expected edge ratio
+#'
+#' Reorders modules based on intra-module observed-to-expected edge ratio
+#' and assigns new module labels (M1 = highest OE).
+#'
+#' @param module_stats_df Data frame with module size and edge counts.
+#' @param condition Condition name prefix.
+#' @return List with renamed module stats and old-to-new module map.
+#' @noRd
+rename_modules_by_OE <- function(module_stats_df, condition) {
+  
+  module_stats_df <- module_stats_df %>%
+    dplyr::mutate(
+      Expected_Edges = Module_Size * (Module_Size - 1) / 2,
+      OE_ratio = ifelse(Expected_Edges > 0, Num_Edges / Expected_Edges, 0)
+    ) %>%
+    dplyr::arrange(
+      dplyr::desc(OE_ratio),
+      dplyr::desc(Num_Edges),
+      dplyr::desc(Module_Size)
+    ) %>%
+    dplyr::mutate(
+      Old_Module = Module,
+      New_Module = paste0(condition, "_M", dplyr::row_number())
+    )
+  
+  module_map <- setNames(module_stats_df$New_Module, module_stats_df$Old_Module)
+  
+  list(
+    module_stats_df = module_stats_df %>%
+      dplyr::select(
+        Module = New_Module,
+        Condition,
+        Module_Size,
+        Num_Edges,
+        Expected_Edges,
+        OE_ratio,
+        Density_Unweighted,
+        Mean_Weight
+      ),
+    module_map = module_map
+  )
 }

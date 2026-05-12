@@ -155,7 +155,14 @@ cli_tab <- function() {
           tags$tr(
             tags$td("normGeneExp_file_path"),
             tags$td("Path to the normalized gene expression matrix used for DiCE analysis."),
-            tags$td("Samples × genes + last column = class label"),
+            tags$td("Genes × Samples. Genes under `Gene` column."),
+            tags$td("Required")
+          ),
+          
+          tags$tr(
+            tags$td("metadata_file_path"),
+            tags$td("Path to the metadata file containing sample annotations."),
+            tags$td("Samples × Metadata columns. Include `sample_id` and `phenotype` columns."),
             tags$td("Required")
           ),
           
@@ -171,6 +178,13 @@ cli_tab <- function() {
             tags$td("Label of control / reference samples."),
             tags$td("Example: 'Normal'"),
             tags$td("Required")
+          ),
+          
+          tags$tr(
+            tags$td("remove_pc_genes"),
+            tags$td("Whether to remove non-protein-coding genes before downstream analysis."),
+            tags$td("TRUE or FALSE."),
+            tags$td("TRUE")
           ),
           
           tags$tr(
@@ -230,6 +244,20 @@ cli_tab <- function() {
           ),
           
           tags$tr(
+            tags$td("ppi_db"),
+            tags$td("Protein–protein interaction (PPI) database used to construct the network."),
+            tags$td("Options: `stringdb` or `biogrid`."),
+            tags$td("stringdb")
+          ),
+          
+          tags$tr(
+            tags$td("stringDB_confidence"),
+            tags$td("Minimum STRINGdb confidence score threshold used to retain PPI interactions."),
+            tags$td("Integer between 0–1000 (commonly 400 or 700). Used only when `ppi_db = 'stringdb'`."),
+            tags$td("400 if ppi_db = `stringdb`")
+          ),
+          
+          tags$tr(
             tags$td("centrality_list"),
             tags$td("List of centrality measures to compute in Phase IV."),
             tags$td("Example: ['betweenness', 'eigenvector']"),
@@ -264,10 +292,101 @@ cli_tab <- function() {
           ),
 
           tags$tr(
-            tags$td("run_modules"),
-            tags$td("Whether to run unweighted PPI module detection after DiCE ranking."),
-            tags$td("TRUE or FALSE"),
-            tags$td("TRUE")
+            tags$td("modules"),
+            tags$td("Configuration settings for module detection analysis on final DiCE genes."),
+            tags$td("Nested JSON object containing module analysis parameters."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$run"),
+            tags$td("Whether to run module detection analysis."),
+            tags$td("TRUE or FALSE."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted"),
+            tags$td("Settings for unweighted module detection."),
+            tags$td("Nested JSON object."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted$enabled"),
+            tags$td("Whether to run unweighted module detection."),
+            tags$td("TRUE or FALSE."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted$algorithm"),
+            tags$td("Community detection algorithm for unweighted modules."),
+            tags$td("Options: `louvain` or `leiden`."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted$resolution"),
+            tags$td("Resolution parameter controlling module granularity."),
+            tags$td("Numeric value."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted$leiden_itrs"),
+            tags$td("Number of Leiden optimization iterations."),
+            tags$td("Integer value. Used only when algorithm = `leiden`."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$unweighted$leiden_beta"),
+            tags$td("Beta parameter for Leiden optimization."),
+            tags$td("Numeric value. Used only when algorithm = `leiden`."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted"),
+            tags$td("Settings for weighted module detection."),
+            tags$td("Nested JSON object."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted$enabled"),
+            tags$td("Whether to run weighted module detection."),
+            tags$td("TRUE or FALSE."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted$algorithm"),
+            tags$td("Community detection algorithm for weighted modules."),
+            tags$td("Options: `louvain` or `leiden`."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted$resolution"),
+            tags$td("Resolution parameter controlling module granularity."),
+            tags$td("Numeric value."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted$leiden_itrs"),
+            tags$td("Number of Leiden optimization iterations."),
+            tags$td("Integer value. Used only when algorithm = `leiden`."),
+            tags$td("Optional")
+          ),
+          
+          tags$tr(
+            tags$td("modules$weighted$leiden_beta"),
+            tags$td("Beta parameter for Leiden optimization."),
+            tags$td("Numeric value. Used only when algorithm = `leiden`."),
+            tags$td("Optional")
           ),
           
           tags$tr(
@@ -312,6 +431,7 @@ cli_tab <- function() {
             "species": "human",
             "dge_file_path": "sample_data/sample_Human_data_DGE.Rds",
             "normGeneExp_file_path": "sample_data/sample_Human_data_geneExp.Rds",
+            "metadata_file_path": "sample_data/sample_Human_metadata.csv",
             "treatment": "Tumor",
             "control": "Normal",
             "loose_criteria": "adj.P.Val",
@@ -322,6 +442,9 @@ cli_tab <- function() {
             "ig_cutoff": "all_mean",
             "ig_custom_cutoff": null,
             "corr_method": "pearson",
+            "ppi_db": "stringdb",
+            "stringDB_confidence": 400,
+            "remove_pc_genes": false,
             "centrality_list": "betweenness,eigenvector",
             "dice_rules": [
               {
@@ -337,7 +460,25 @@ cli_tab <- function() {
               }
             ],
             "dice_logic": "OR",
-            "run_modules": true,
+            "modules": {
+              "run": true,
+              
+              "unweighted": {
+                "enabled": true,
+                "algorithm": "louvain",
+                "resolution": 1,
+                "leiden_itrs": 10,
+                "leiden_beta": 0.01
+              },
+              
+              "weighted": {
+                "enabled": true,
+                "algorithm": "louvain",
+                "resolution": 1,
+                "leiden_itrs": 10,
+                "leiden_beta": 0.01
+              }
+            },
             "seed": 123,
             "outdir": "dice_cli_output",
             "job_name": "DiCE_CLI_Run"

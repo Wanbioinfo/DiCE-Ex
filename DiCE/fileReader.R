@@ -36,7 +36,7 @@ read_any <- function(path) {
   }
   
   if (ext %in% c("csv")) {
-    return(read.csv(path, stringsAsFactors = FALSE))
+    return(read.csv(path, stringsAsFactors = FALSE, check.names = FALSE))
   }
   
   if (ext %in% c("tsv", "txt")) {
@@ -44,4 +44,22 @@ read_any <- function(path) {
   }
   
   stop(paste("Unsupported file type:", ext))
+}
+
+
+#' Handle NAs in gene expression data as numerical values
+#'
+#'
+#' @param exp_df Gene expression data with last column for phenotype
+#'
+#' @return NA handled dataframe of gene expression data
+#' @noRd
+NA_to_numeric <- function(exp_df){
+  class_col <- colnames(exp_df)[ncol(exp_df)]
+  exp_df <- data.frame(apply(exp_df[,-(ncol(exp_df))], 2, as.numeric),
+                       exp_df[,ncol(exp_df)],
+                       check.names=FALSE)
+  colnames(exp_df)[ncol(exp_df)] <- class_col
+  
+  return(exp_df)
 }

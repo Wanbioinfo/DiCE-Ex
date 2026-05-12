@@ -85,8 +85,15 @@ about_tab <- function() {
             div(
               class = "mini-card",
               h5("Normalized expression matrix"),
-              p("Formatted as samples × genes with one additional class/Group/Condition column. Do not place sample names as the first column."),
-              tags$img(src = "images/gene_expr_image.png", class = "doc-img-sm")
+              p("Formatted as genes × samples. Do not place gene symbols as rownames. Place them under a column name `Gene`."),
+            )
+          ),
+          column(
+            width = 6,
+            div(
+              class = "mini-card",
+              h5("Metadata file"),
+              p("Formatted with samples as rows. Include sample IDs under a column named `sample_id` and phenotype/group labels under a column named `phenotype`.")
             )
           ),
           column(

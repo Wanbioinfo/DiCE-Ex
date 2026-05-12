@@ -51,6 +51,7 @@ library("org.Mm.eg.db")
 library("readxl")
 library('Hmisc')
 
+source("DiCE/arrange_Input.R")
 source("DiCE/calculate_NetCentralities.R")
 source("DiCE/calculate_weightedIG.R")
 source("DiCE/corr_calculations.R")
@@ -98,7 +99,6 @@ dir.create(jobs_root, showWarnings = FALSE, recursive = TRUE)
 
 job_dir <- function(job_id) file.path(jobs_root, job_id)
 
-
 write_status <- function(job_id, state, message = "", step = NULL, pct = NULL, job_title = NULL) {
   d <- job_dir(job_id)
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
@@ -106,11 +106,11 @@ write_status <- function(job_id, state, message = "", step = NULL, pct = NULL, j
   jsonlite::write_json(
     list(
       job_id    = job_id,
-      job_title = job_title,  
+      job_title = job_title %||% "",   # never NULL
       state     = state,
       message   = message,
-      step      = step,
-      pct       = pct,
+      step      = step     %||% "",    # never NULL
+      pct       = pct      %||% 0,     # never NULL
       time      = as.character(Sys.time())
     ),
     path = file.path(d, "status.json"),
@@ -118,6 +118,7 @@ write_status <- function(job_id, state, message = "", step = NULL, pct = NULL, j
     pretty = TRUE
   )
 }
+
 
 progress_from_dice_msg <- function(msg) {
   if (!is.character(msg) || !nzchar(msg)) return(NULL)
@@ -297,6 +298,7 @@ ui <- function(request) {
   
   tagList(
     tags$head(
+      
       tags$style(HTML("
       body { padding-bottom: 50px; }
 
@@ -616,6 +618,7 @@ ui <- function(request) {
       Shiny.addCustomMessageHandler('loadFiles', function(msg) {
         if (msg.expr) $('#expr_file').parent().find('.form-control').val(msg.expr);
         if (msg.dge)  $('#dge_file').parent().find('.form-control').val(msg.dge);
+        if (msg.metadata) $('#metadata_file').parent().find('.form-control').val(msg.metadata);
       });
 
       // external trigger to call visNetwork exportPNG()
@@ -746,6 +749,14 @@ server <- function(input, output, session) {
     tags$div(
       style="margin-top:6px; color:#198754; font-size:13px;",
       icon("check-circle"), " Sample expression data loaded"
+    )
+  })
+  
+  output$download_weighted_modules_ui <- renderUI({
+    downloadButton(
+      "download_weighted_modules",
+      "Download weighted modules",
+      class = "btn btn-success"
     )
   })
   
@@ -904,6 +915,36 @@ server <- function(input, output, session) {
     )
   })
   
+  output$metadata_loaded_badge <- renderUI({
+    req(metadata_df())
+    tags$div(
+      style="margin-top:6px; color:#198754; font-size:13px;",
+      icon("check-circle"), " Metadata file loaded"
+    )
+  })
+  
+  output$download_buttons_ui <- renderUI({
+    if (isTRUE(downloads_ready())) {
+      downloadButton(
+        "download_dice_results",
+        "Download DiCE results",
+        class = "btn btn-success"
+      )
+    } else {
+      div(
+        class = "disabled-wrap",
+        downloadButton(
+          "download_dice_results",
+          "Download DiCE results",
+          class = "btn btn-success"
+        ),
+        tags$div(
+          style = "margin-top:6px; font-size:12px; color:#666;",
+          "Downloads will be enabled after results finish loading."
+        )
+      )
+    }
+  })
   
   ################################
   ## 2. Log system
@@ -936,6 +977,8 @@ server <- function(input, output, session) {
   all_module_edges <- reactiveVal(NULL)
   
   modules_loading <- reactiveVal(FALSE)
+  
+  gene_plot_obj <- reactiveVal(NULL)
   
   load_heavy_module_objects <- function(jid) {
     if (is.null(jid) || !nzchar(jid)) return(invisible(NULL))
@@ -976,28 +1019,38 @@ server <- function(input, output, session) {
       nrow(modules_membership()) > 0
   })
   
-  output$download_buttons_ui <- renderUI({
-    if (isTRUE(downloads_ready())) {
-      downloadButton("download_dice_results", "Download DiCE results", class = "btn btn-success")
-    } else {
-      div(
-        class = "disabled-wrap",
-        downloadButton("download_dice_results", "Download DiCE results", class = "btn btn-success"),
-        tags$div(style="margin-top:6px; font-size:12px; color:#666;",
-                 "Downloads will be enabled after results finish loading.")
+  output$download_module_buttons_ui <- renderUI({
+    
+    buttons <- tagList(
+      tags$div(
+        style = "display:inline-block; margin-right:10px;",
+        downloadButton(
+          outputId = "download_modules_btn",
+          label = "Download unweighted modules",
+          class = "btn btn-success"
+        )
+      ),
+      
+      tags$div(
+        style = "display:inline-block;",
+        downloadButton(
+          outputId = "download_weighted_modules_btn",
+          label = "Download weighted modules",
+          class = "btn btn-success"
+        )
       )
-    }
-  })
-  
-  output$download_modules_ui <- renderUI({
+    )
+    
     if (isTRUE(modules_ready())) {
-      downloadButton("download_modules_both", "Download modules", class = "btn btn-success")
+      buttons
     } else {
       div(
         class = "disabled-wrap",
-        downloadButton("download_modules_both", "Download modules", class = "btn btn-success"),
-        tags$div(style="margin-top:6px; font-size:12px; color:#666;",
-                 "Module downloads will be enabled after module results finish loading.")
+        buttons,
+        tags$div(
+          style = "margin-top:6px; font-size:12px; color:#666;",
+          "Module downloads will be enabled after module results finish loading."
+        )
       )
     }
   })
@@ -1005,8 +1058,17 @@ server <- function(input, output, session) {
   
   expr_df <- reactiveVal(NULL)
   dge_df  <- reactiveVal(NULL)
-  
+  metadata_df <- reactiveVal(NULL)
 
+  
+  expr_plot_df <- reactive({
+  req(expr_df(), metadata_df())
+  
+  exp_to_DiCE_format(
+    metadata = metadata_df(),
+    exp_data = expr_df()
+  )
+})
   
   ################################
   ## 4. Job link + status polling (NO reload)
@@ -1196,6 +1258,11 @@ server <- function(input, output, session) {
       f8 <- file.path(jd, "between_module_edges.rds")
       if (file.exists(f8)) modules_between_edges(readRDS(f8))
       
+      f9 <- file.path(jd, "metadata_input.rds")
+      if (file.exists(f9)) {
+        metadata_df(readRDS(f9))
+      }
+      
       pf <- file.path(jd, "params.json")
       if (file.exists(pf)) {
         p <- jsonlite::read_json(pf, simplifyVector = TRUE)
@@ -1221,6 +1288,7 @@ server <- function(input, output, session) {
   ################################
   expr_path <- reactiveVal(NULL)
   dge_path  <- reactiveVal(NULL)
+  metadata_path <- reactiveVal(NULL)
   
   observeEvent(input$expr_file, {
     req(input$expr_file)
@@ -1281,6 +1349,37 @@ server <- function(input, output, session) {
     dge_tbl <- as.data.frame(dge_tbl)
     dge_tbl <- normalize_dge_cols(dge_tbl)
     dge_df(dge_tbl)
+  })
+  
+  observeEvent(input$metadata_file, {
+    req(input$metadata_file)
+    req(input$metadata_file$datapath)
+    req(nzchar(input$metadata_file$datapath))
+    
+    path <- input$metadata_file$datapath
+    req(file.exists(path))
+    
+    metadata_path(path)
+    
+    ext <- tolower(tools::file_ext(input$metadata_file$name))
+    
+    metadata_tbl <- switch(
+      ext,
+      "csv"  = readr::read_csv(path, show_col_types = FALSE),
+      "tsv"  = readr::read_tsv(path, show_col_types = FALSE),
+      "txt"  = readr::read_tsv(path, show_col_types = FALSE),
+      "xls"  = readxl::read_excel(path),
+      "xlsx" = readxl::read_excel(path),
+      "rds"  = {
+        obj <- readRDS(path)
+        if (is.matrix(obj)) obj <- as.data.frame(obj)
+        if (!is.data.frame(obj)) stop("Metadata RDS must contain a data frame or matrix.")
+        obj
+      },
+      readr::read_delim(path, delim = NULL, show_col_types = FALSE)
+    )
+    
+    metadata_df(as.data.frame(metadata_tbl))
   })
   
   ################################
@@ -1444,6 +1543,9 @@ server <- function(input, output, session) {
       dplyr::rename(
         `Number of Nodes` = Num_Nodes,
         `Number of Edges` = Num_Edges
+      ) %>%
+      dplyr::mutate(
+        OE_ratio = round(OE_ratio, 2)
       )
     
     DT::datatable(
@@ -1568,10 +1670,10 @@ server <- function(input, output, session) {
     }
   )
   
-  output$download_modules_both <- downloadHandler(
+  output$download_modules_btn <- downloadHandler(
     filename = function() {
       job <- gsub("[^A-Za-z0-9_-]", "_", input$job_title)
-      paste0("DiCE_modules_", job, "_", format(Sys.time(), "%Y%m%d-%H%M%S"), ".xlsx")
+      paste0("DiCE_unweighted_modules_", job, "_", format(Sys.time(), "%Y%m%d-%H%M%S"), ".xlsx")
     },
     content = function(file) {
       s  <- modules_summary()
@@ -1580,7 +1682,7 @@ server <- function(input, output, session) {
       m  <- modules_membership()
       req(s, ms, be, m)
       
-      jid <- job_id_qs()
+      jid <- loaded_job_id() %||% job_id_qs()
       req(jid)
       
       ae_file <- file.path(job_dir(jid), "all_module_edges.rds")
@@ -1608,27 +1710,68 @@ server <- function(input, output, session) {
     }
   )
   
-  output$download_gene_plot <- downloadHandler(
-    filename = function() paste0(input$ppi_clicked_gene, "_expression.png"),
+  output$download_weighted_modules_btn <- downloadHandler(
+    filename = function() {
+      job <- gsub("[^A-Za-z0-9_-]", "_", input$job_title)
+      paste0("DiCE_weighted_modules_", job, "_", format(Sys.time(), "%Y%m%d-%H%M%S"), ".xlsx")
+    },
+    
     content = function(file) {
-      req(input$ppi_clicked_gene)
-      g   <- input$ppi_clicked_gene
-      dat <- expr_df()
-      cond_col <- names(dat)[ncol(dat)]
+      jid <- loaded_job_id() %||% job_id_qs()
+      req(jid)
       
-      df_long <- data.frame(
-        Condition  = dat[[cond_col]],
-        Expression = dat[[g]]
+      weighted_file <- file.path(job_dir(jid), "weighted_modules.rds")
+      req(file.exists(weighted_file))
+      
+      weighted_modules <- readRDS(weighted_file)
+      
+      wb <- openxlsx::createWorkbook()
+      
+      openxlsx::addWorksheet(wb, "Network modules")
+      openxlsx::writeData(wb, "Network modules", as.data.frame(weighted_modules$network_modules))
+      
+      openxlsx::addWorksheet(wb, "Module stats")
+      openxlsx::writeData(wb, "Module stats", as.data.frame(weighted_modules$module_stats))
+      
+      openxlsx::addWorksheet(wb, "Jaccard score")
+      openxlsx::writeData(wb, "Jaccard score", as.data.frame(weighted_modules$cmp_jaccard), rowNames = TRUE)
+      
+      openxlsx::addWorksheet(wb, "Common genes count")
+      openxlsx::writeData(wb, "Common genes count", as.data.frame(weighted_modules$cmp_count), rowNames = TRUE)
+      
+      openxlsx::addWorksheet(wb, "Nodes stats")
+      openxlsx::writeData(wb, "Nodes stats", as.data.frame(weighted_modules$nodes_stats))
+      
+      openxlsx::addWorksheet(wb, "Edges")
+      openxlsx::writeData(wb, "Edges", as.data.frame(weighted_modules$edges_with_modules))
+      
+      openxlsx::addWorksheet(wb, "Treatment inter modules")
+      openxlsx::writeData(wb, "Treatment inter modules",
+                          as.data.frame(weighted_modules$treatment_interMod))
+      
+      openxlsx::addWorksheet(wb, "Control inter modules")
+      openxlsx::writeData(wb, "Control inter modules",
+                          as.data.frame(weighted_modules$control_interMod))
+      
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+    }
+  )
+  
+  output$download_gene_plot <- downloadHandler(
+    filename = function() {
+      paste0(input$ppi_clicked_gene, "_expression.png")
+    },
+    
+    content = function(file) {
+      req(gene_plot_obj())
+      
+      ggplot2::ggsave(
+        filename = file,
+        plot = gene_plot_obj(),
+        width = 7,
+        height = 5,
+        dpi = 300
       )
-      
-      p <- ggplot2::ggplot(df_long, ggplot2::aes(x = Condition, y = Expression, fill = Condition)) +
-        ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-        ggplot2::geom_jitter(width = 0.15, alpha = 0.6, size = 2) +
-        ggplot2::labs(title = paste("Expression of", g), x = "", y = "Normalized expression") +
-        ggplot2::theme_minimal(base_size = 18) +
-        ggplot2::theme(legend.position = "none")
-      
-      ggsave(file, plot = p, width = 7, height = 5, dpi = 300)
     }
   )
   
@@ -1875,10 +2018,14 @@ server <- function(input, output, session) {
     content = function(file) {
       zip::zip(
         zipfile = file,
-        files = c("sample_data/sample_Human_data_geneExp.csv",
-                  "sample_data/sample_Human_data_DGE.csv",
-                  "sample_data/sample_Mouse_data_geneExp.csv",
-                  "sample_data/sample_Mouse_data_DGE.csv")
+        files = c(
+          "sample_data/sample_Human_data_geneExp.csv",
+          "sample_data/sample_Human_data_DGE.csv",
+          "sample_data/sample_Human_metadata.csv",
+          "sample_data/sample_Mouse_data_geneExp.csv",
+          "sample_data/sample_Mouse_data_DGE.csv",
+          "sample_data/sample_Mouse_metadata.csv"
+        )
       )
     }
   )
@@ -1909,11 +2056,13 @@ server <- function(input, output, session) {
       
       sample_expr <- "sample_data/sample_Human_data_geneExp.csv"
       sample_dge  <- "sample_data/sample_Human_data_DGE.csv"
+      sample_meta <- "sample_data/sample_Human_metadata.csv"
       
-      req(file.exists(sample_expr), file.exists(sample_dge))
+      req(file.exists(sample_expr), file.exists(sample_dge), file.exists(sample_meta))
       
       expr_path(sample_expr)
       dge_path(sample_dge)
+      metadata_path(sample_meta)
       
       expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
       dge_tbl <- vroom::vroom(sample_dge, show_col_types = FALSE)
@@ -1921,11 +2070,14 @@ server <- function(input, output, session) {
       dge_tbl <- normalize_dge_cols(dge_tbl)
       dge_df(dge_tbl)
       
+      metadata_df(readr::read_csv(sample_meta, show_col_types = FALSE))
+      
       session$sendCustomMessage(
         "loadFiles",
         list(
           expr = "sample_Human_data_geneExp.csv",
-          dge  = "sample_Human_data_DGE.csv"
+          dge  = "sample_Human_data_DGE.csv",
+          metadata = "sample_Human_metadata.csv"
         )
       )
       
@@ -1957,9 +2109,13 @@ server <- function(input, output, session) {
       
       sample_expr <- "sample_data/sample_Mouse_data_geneExp.csv"
       sample_dge  <- "sample_data/sample_Mouse_data_DGE.csv"
+      sample_meta <- "sample_data/sample_Mouse_metadata.csv"
+      
+      req(file.exists(sample_expr), file.exists(sample_dge), file.exists(sample_meta))
       
       expr_path(sample_expr)
       dge_path(sample_dge)
+      metadata_path(sample_meta)
       
       expr_df(vroom::vroom(sample_expr, show_col_types = FALSE))
       
@@ -1968,11 +2124,14 @@ server <- function(input, output, session) {
       dge_tbl <- normalize_dge_cols(dge_tbl)
       dge_df(dge_tbl)
       
+      metadata_df(readr::read_csv(sample_meta, show_col_types = FALSE))
+      
       session$sendCustomMessage(
         "loadFiles",
         list(
           expr = "sample_Mouse_data_geneExp.csv",
-          dge  = "sample_Mouse_data_DGE.csv"
+          dge  = "sample_Mouse_data_DGE.csv",
+          metadata = "sample_Mouse_metadata.csv"
         )
       )
       
@@ -2029,6 +2188,7 @@ server <- function(input, output, session) {
     
     saveRDS(expr_df(), file.path(jd, "expr_input.rds"))
     saveRDS(dge_df(),  file.path(jd, "dge_input.rds"))
+    saveRDS(metadata_df(), file.path(jd, "metadata_input.rds"))
     
     write_status(job_id, "queued", "Job submitted.", job_title = input$job_title)
     
@@ -2130,6 +2290,7 @@ server <- function(input, output, session) {
       species      = tolower(input$species),
       treat        = input$group_treat,
       control      = input$group_control,
+      remove_pc_genes = input$remove_pc_genes,
       sig_metric   = input$significant_metric,
       sig_thresh   = input$significant_thresh,
       logfc_thresh = input$phase1_logfc_thresh,
@@ -2138,9 +2299,19 @@ server <- function(input, output, session) {
       ig_cutoff    = input$phase2_ig_cutoff,
       custom_ig    = input$phase2_custom_ig,
       corr_type    = tolower(input$phase3_corr),
+      ppi_db       = input$phase3_ppi_db,
+      stringDB_confidence = input$phase3_string_confidence,
       centralities = input$phase4_cents,
       dice_rules   = dice_rules,
-      dice_logic   = input$phase5_dice_logic
+      dice_logic   = input$phase5_dice_logic,
+      weightedM_algo = input$weighted_module_algorithm,
+      weightedM_res = input$weighted_module_resolution,
+      weightedM_leiden_itrs = input$weighted_module_leiden_itrs,
+      weightedM_leiden_beta = input$weighted_module_leiden_beta,
+      unweightedM_algo = input$unweighted_module_algorithm,
+      unweightedM_res = input$unweighted_module_resolution,
+      unweightedM_leiden_itrs = input$unweighted_module_leiden_itrs,
+      unweightedM_leiden_beta = input$unweighted_module_leiden_beta
     )
     
     jsonlite::write_json(
@@ -2152,10 +2323,11 @@ server <- function(input, output, session) {
     
     dge_file  <- dge_path()
     expr_file <- expr_path()
+    metadata_file <- metadata_path()
     
-    req(expr_file, dge_file)
-    req(nzchar(expr_file), nzchar(dge_file))
-    req(file.exists(expr_file), file.exists(dge_file))
+    req(expr_file, dge_file, metadata_file)
+    req(nzchar(expr_file), nzchar(dge_file), nzchar(metadata_file))
+    req(file.exists(expr_file), file.exists(dge_file), file.exists(metadata_file))
     
     current_status("Initializing DiCE run…")
     
@@ -2179,12 +2351,15 @@ server <- function(input, output, session) {
     ))
     
     future::future({
+      set.seed(123)
+      
       
       write_status(job_id, "running",
                    message="DiCE is running...",
                    step="Running DiCE (Phases I–IV)…",
                    pct=10,
                    job_title=params$job_title)
+      job_start_time <- proc.time() 
       
       jd <- job_dir(job_id)
       
@@ -2194,6 +2369,7 @@ server <- function(input, output, session) {
       dice_res <- NULL
       phase3_interactions <- NULL
       
+      
       log_vec <- capture.output(
         withCallingHandlers(
           {
@@ -2202,6 +2378,7 @@ server <- function(input, output, session) {
               species               = params$species,
               dge_file_path         = dge_file,
               normGeneExp_file_path = expr_file,
+              metadata_file_path    = metadata_file,
               treatment             = params$treat,
               control               = params$control,
               loose_criteria        = params$sig_metric,
@@ -2213,11 +2390,14 @@ server <- function(input, output, session) {
               ig_custom_cutoff      = params$custom_ig,
               corr_mode             = "directCorr",
               corr_method           = params$corr_type,
+              ppi_db                = params$ppi_db,
+              stringDB_confidence   = params$stringDB_confidence,
               corr_pval_cutoff      = 1,
               centrality_list       = params$centralities,
               dice_rules            = params$dice_rules,
               dice_logic            = params$dice_logic,
-              remove_pc_genes  = FALSE
+              remove_pc_genes       = params$remove_pc_genes,
+              
             )
             
             
@@ -2241,9 +2421,27 @@ server <- function(input, output, session) {
             
             modules <- detect_PPI_unweightedModules(
               gene_list       = dice_genes,
-              interactions_df = phase3_interactions,
+              interactions    = phase3_interactions,
+              algorithm       = params$unweightedM_algo,
+              resolution      = params$unweightedM_res,
+              leiden_itrs     = params$unweightedM_leiden_itrs,
+              leiden_beta     = params$unweightedM_leiden_beta,
               seed            = 123
             )
+            
+            weighted_modules <- detect_PPI_weightedModules (
+              gene_list      = dice_genes,
+              interactions   = phase3_interactions,
+              treatment      = params$treat,
+              control        = params$control,
+              algorithm      = params$weightedM_algo,
+              resolution     = params$weightedM_res,
+              leiden_itrs    = params$weightedM_leiden_itrs,
+              leiden_beta    = params$weightedM_leiden_beta,
+              seed           = 123
+            )
+            
+            
             write_status(job_id, "running",
                          message="Saving outputs…",
                          step="Saving outputs…",
@@ -2291,7 +2489,18 @@ server <- function(input, output, session) {
       saveRDS(modules$between_module_edges_df,  file.path(jd, "between_module_edges.rds"))
       saveRDS(modules$all_edges_df, file.path(jd, "all_module_edges.rds"))
       
-      write_status(job_id, "finished", "Done.")
+      saveRDS(weighted_modules, file.path(jd, "weighted_modules.rds"))
+      
+      runtime_sec <- round((proc.time() - job_start_time)[["elapsed"]])
+      runtime_msg <- paste0("Done. Runtime: ", floor(runtime_sec / 60), "m ", 
+                            runtime_sec %% 60, "s")
+      
+      write_status(job_id, "finished",
+                   message   = runtime_msg,
+                   step      = "Finished.",
+                   pct       = 100,
+                   job_title = params$job_title)
+      
       list(job_id = job_id, df = result_df, log = log_vec, modules = modules)
       
     }, seed = TRUE) %...>% (function(res_list) {
@@ -2315,6 +2524,8 @@ server <- function(input, output, session) {
       modules_stats(modules_obj$module_stats_df)
       modules_between_edges(modules_obj$between_module_edges_df)
       all_module_edges(modules_obj$all_edges_df)
+      
+      loaded_job_id(res_list$job_id)
       
       current_status("Finished.")
       removeModal()
@@ -2352,8 +2563,9 @@ server <- function(input, output, session) {
           
           tags$p(tags$b("Please verify the following before retrying:")),
           tags$ul(
-            tags$li("Expression matrix: Genes should be provided as columns, samples as rows, and the class/phenotype label must be included in the last column. Sample names should not be placed in the first column."),
+            tags$li("Expression matrix: Genes should be provided as rows under Gene column, and the samples as columns. Sample names should not be placed in the first column."),
             tags$li("Differential gene expression analysis file: must include gene name, logFC, p-value, and adjusted p-value."),
+            tag$li("Metadata file containing sample information must be provided. Samples should be under Sample_ID column and a column with corresponding phenotype or treatment labels."),
             tags$li("Treatment and control labels must exactly match values in the class column (case-sensitive).")
           ),
           
@@ -2381,8 +2593,9 @@ server <- function(input, output, session) {
     g <- input$ppi_clicked_gene
     if (is.null(g) || !nzchar(g)) return()
     
-    dat <- expr_df()
-    dge <- dge_df()
+    dat  <- expr_df()
+    meta <- metadata_df()
+    dge  <- dge_df()
     
     if (is.null(dat) || !is.data.frame(dat) || nrow(dat) == 0 || ncol(dat) < 2) {
       showModal(modalDialog(
@@ -2390,6 +2603,16 @@ server <- function(input, output, session) {
         easyClose = TRUE,
         footer = modalButton("Close"),
         tags$em("Expression data are not available for this bookmarked job.")
+      ))
+      return()
+    }
+    
+    if (is.null(meta) || !is.data.frame(meta) || nrow(meta) == 0) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("Metadata are not available for this bookmarked job.")
       ))
       return()
     }
@@ -2404,51 +2627,90 @@ server <- function(input, output, session) {
       return()
     }
     
-    cond_col <- names(dat)[ncol(dat)]
-    if (is.null(cond_col) || !nzchar(cond_col)) {
+    # -----------------------------
+    # Expression format:
+    # rows = genes, columns = samples
+    # first column = gene symbols
+    # -----------------------------
+    gene_col_expr <- names(dat)[1]
+    
+    gene_row <- dat[as.character(dat[[gene_col_expr]]) == g, , drop = FALSE]
+    
+    if (nrow(gene_row) == 0) {
       showModal(modalDialog(
         title = paste("Gene:", g),
         easyClose = TRUE,
         footer = modalButton("Close"),
-        tags$em("Could not identify the condition/class column in the expression matrix.")
+        tags$em("This gene is not present in the saved expression matrix.")
       ))
       return()
     }
     
-    if (!(g %in% names(dat))) {
-      showModal(modalDialog(
-        title = paste("Gene:", g),
-        easyClose = TRUE,
-        footer = modalButton("Close"),
-        tags$em("This gene is not present as a column in the saved expression matrix.")
-      ))
-      return()
-    }
+    gene_row <- gene_row[1, , drop = FALSE]
     
-    df_long <- data.frame(
-      Condition = dat[[cond_col]],
-      Expression = dat[[g]],
+    expr_long <- data.frame(
+      sample_id = names(gene_row)[-1],
+      Expression = as.numeric(gene_row[1, -1]),
       stringsAsFactors = FALSE
     )
     
-    df_long <- df_long[!is.na(df_long$Expression), , drop = FALSE]
+    # -----------------------------
+    # Metadata format:
+    # must contain sample_id and group/phenotype column
+    # -----------------------------
+    meta_names_lower <- tolower(names(meta))
+    
+    sample_col_patterns <- c("sample_id", "sampleid", "sample", "cell_id", "cellid", "cell", "sample id")
+    sample_col_meta <- names(meta)[tolower(names(meta)) %in% sample_col_patterns][1]
+    
+    if (is.na(sample_col_meta)) {
+      sample_col_meta <- names(meta)[1]
+    }
+    
+    group_candidates <- c("phenotype", "treatment", "group", "condition", "class")
+    group_col_meta <- names(meta)[match(TRUE, meta_names_lower %in% group_candidates)]
+    
+    if (is.na(group_col_meta)) {
+      showModal(modalDialog(
+        title = paste("Gene:", g),
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        tags$em("Could not identify group label column in metadata. Expected one of: phenotype, treatment, group, condition, or class.")
+      ))
+      return()
+    }
+    
+    meta_small <- data.frame(
+      sample_id = as.character(meta[[sample_col_meta]]),
+      Condition = as.character(meta[[group_col_meta]]),
+      stringsAsFactors = FALSE
+    )
+    
+    df_long <- merge(expr_long, meta_small, by = "sample_id", all.x = TRUE)
+    df_long <- df_long[!is.na(df_long$Expression) & !is.na(df_long$Condition), , drop = FALSE]
     
     if (nrow(df_long) == 0) {
       showModal(modalDialog(
         title = paste("Gene:", g),
         easyClose = TRUE,
         footer = modalButton("Close"),
-        tags$em("No expression values available for this gene.")
+        tags$em("No matched expression and metadata values available for this gene. Please check sample IDs.")
       ))
       return()
     }
     
     p <- ggplot2::ggplot(df_long, ggplot2::aes(x = Condition, y = Expression, fill = Condition)) +
-      ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-      ggplot2::geom_jitter(width = 0.15, alpha = 0.6, size = 2) +
-      ggplot2::labs(title = paste("Expression of", g), x = "", y = "Normalized expression") +
+      ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.45) +
+      ggplot2::geom_jitter(width = 0.12, alpha = 0.7, size = 2) +
+      ggplot2::labs(
+        title = paste("Expression of", g),
+        x = "",
+        y = "Normalized expression"
+      ) +
       ggplot2::theme_minimal(base_size = 14) +
       ggplot2::theme(legend.position = "none")
+    
+    gene_plot_obj(p)
     
     gene_col <- dplyr::case_when(
       "Gene.Symbol" %in% names(dge) ~ "Gene.Symbol",

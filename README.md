@@ -41,9 +41,9 @@ DiCE-Ex provides a complete, user-friendly interface to perform this analysis di
 
 ### 1. Normalized Expression Matrix
 - File formats: `.csv`, `.tsv`, `.xlsx`, `.rds`
-- Genes as **columns**
-- Samples as **rows**
-- **Class/condition label must be in the LAST column**
+- Genes as **rows**
+- Samples as **columns**
+- **Do not keep genes as rownames. Keep them under `Gene` column.**
 - Do **not** place sample names as the first column
 
 ### 2. Differential Gene Expression (DGE) Results
@@ -53,9 +53,17 @@ Must include the following columns:
 - `P.Value`
 - `adj.P.Val`
 
-### 3. Experimental Design
+### 3. Metadata File
+- File formats: `.csv`, `.tsv`, `.xlsx`, `.rds`
+- Samples as **rows**
+- Must contain:
+  - `sample_id` column matching sample names in the expression matrix
+  - `phenotype` column containing group/class labels
+- Group labels are case-sensitive
+
+### 4. Experimental Design
 - Two-group comparison (e.g., Tumor vs Normal)
-- Group labels must exactly match values in the class column (case-sensitive)
+- Treatment and control labels must exactly match values in the `phenotype` column of the metadata file (case-sensitive)
 
 ---
 

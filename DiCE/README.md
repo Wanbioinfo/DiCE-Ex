@@ -83,10 +83,11 @@ Configure the parameters based on your application:
 - **ig_custom_cutoff** : Numeric IG threshold used only when **ig_cutoff = "custom"**.
 - **corr_mode** : Mode for computing gene–gene correlation. Determines how gene expression data are pre-processed and how correlation is computed. Options:
 	- "directCorr" : Use raw or normalized expression values without dropping zero-expression cells. Computes correlation directly. (Default)
-	- "remove_Zerocells" : Exclude cell pairs where both genes have zero expression before computing correlation. Useful for sparse data. (For scRNAseq data).
-	- "ZINB-WaVE" : Apply ZINB-WaVE denoising to model zero inflation and overdispersion before computing correlation. (For scRNAseq data). 
+	- "remove_zerocells" : Exclude cell pairs where both genes have zero expression before computing correlation. Useful for sparse data. (For scRNAseq data).
+	- "zinbwave" : Apply ZINB-WaVE denoising to model zero inflation and overdispersion before computing correlation. (For scRNAseq data). 
+	- "NewWave" : Apply NewWave denoising to model zero inflation and overdispersion before computing correlation. (For scRNAseq data). 
 - **corr_method** : "pearson" OR "spearman". Default is "pearson".
-- **corr_pval_cutoff** : P-value threshold (default 0.05); correlations with p-value > cutoff are set to 0.
+- **corr_pval_cutoff** : P-value threshold (default 1); correlations with p-value > cutoff are set to 0.
 - **centrality_list** : Character vector of centrality metrics to compute. Valid options include: "betweenness", "eigen vector", "pagerank", "closeness", "harmonic", "authority", "strength". 
 -**dice_rules** : List of rules used to identify final DiCE genes after centrality calculation and ensemble ranking. Rules should be created using helper functions such as 					dice_centrality_rule() and dice_ensemble_rule(). For a centrality rule, a gene passes if it satisfies the specified cutoff in either the treatment or control network 						for that centrality. For an ensemble rule, a gene passes if its Ensemble_Rank satisfies the specified cutoff. Default uses Betweenness top 25% in either treatment or 						control network.
 -**dice_logic** : Logic used to combine multiple rules in dice_rules. Options include:
@@ -303,12 +304,18 @@ head(dice_results$dice_results_df)
 Configure the parameters for `detect_PPI_weightedModules()`:
 
 - **gene_list** : Character vector of genes to retain in the networks.
-- **interactions_df** : Data frame of interactions with `source`, `target`, and condition-specific weight columns named `weight_<condition>` (e.g., `weight_Tumor`).
+- **interactions** : Data frame of interactions with `source`, `target`, and condition-specific weight columns named `weight_<condition>` (e.g., `weight_Tumor`).
 - **treatment** : Character string naming the treatment condition (used to select `weight_<treatment>`. E.g., "Tumor").
 - **control** : Character string naming the control condition (used to select `weight_<control>`. E.g., "Normal").
-- **louvain_resolution** : Resolution parameter for computing modularity in Louvain algorithm (default 1).
+- **algorithm** : Community detection algorithm to use. Options are "louvain" (default) or "leiden". Louvain is fast and widely used, while Leiden provides improved partition quality and guarantees well-connected communities.
+- **resolution** : Resolution parameter controlling the granularity of detected modules. Higher values lead to more (smaller) modules, while lower values result in fewer (larger) modules. Default is 1.
+- **leiden_itrs** : Number of iterations for the Leiden algorithm. More iterations can improve stability and quality of community detection, but increase computation time. Default is 3.
+- **leiden_beta** : Randomness parameter for the Leiden algorithm. Controls the level of randomness during node reassignment. Higher values introduce more randomness, potentially escaping local optima. Default is 0.01.
 - **seed** : Random seed for reproducibility (default 123).
 
+
+
+#' @param seed Random seed for reproducibility (default 123).
 
 Example to find condition-sepcific weighted modules.
 
@@ -332,14 +339,22 @@ head(res$nodes_stats)
 `detect_PPI_unweightedModules()` identifies community modules in an unweighted STRING v12 PPI network for a given gene set. It extracts STRING interactions for the selected genes (combined score ≥ 400), builds the PPI graph, detects Louvain communities, and returns module summaries, gene-to-module assignments, and intra-module interaction tables.
 
 - **Input:**
-  - `gene_list`: genes for the module analysis
-  - `species`: `"human"` or `"mouse"` (loads the corresponding STRING v12 reference files)
-  - `seed`: random seed for reproducibility
+	- **gene_list** : genes for the module analysis
+	- **interactions** : Data frame of interactions with `source`, `target`
+	- **algorithm** : Community detection algorithm to use. Options are "louvain" (default) or "leiden". Louvain is fast and widely used, while Leiden provides improved partition quality and guarantees well-connected communities.
+	- **resolution** : Resolution parameter controlling the granularity of detected modules. Higher values lead to more (smaller) modules, while lower values result in fewer (larger) modules. Default is 1.
+	- **leiden_itrs** : Number of iterations for the Leiden algorithm. More iterations can improve stability and quality of community detection, but increase computation time. Default is 3.
+	- **leiden_beta** : Randomness parameter for the Leiden algorithm. Controls the level of randomness during node reassignment. Higher values introduce more randomness, potentially escaping local optima. Default is 0.01.
+	- **seed** : random seed for reproducibility
 
 - **Output:** 
-  - `summary_df`: number of modules and modularity
-  - `membership_df`: gene-to-module assignments and within-module degree
-  - `edges_by_module`: intra-module interaction tables split by module
+  - `summary_df`: Summary of number of modules and modularity
+  - `module_stats_df`: Number of nodes and intra-module edges in each module
+  - `membership_df`: Module assignments and within-module degrees
+  - `between_module_edges_df` : Number of inter-module edges connecting each pair of modules
+  - `all_edges_df` : All retained edges with Gene1, Gene2, combined_score, Gene1_Module, and Gene2_Module
+  - `edges_by_module` : List of intra-module interaction tables for each module
+
 
 Example to find unweighted network modules.
 
@@ -347,7 +362,7 @@ Example to find unweighted network modules.
 # Run module detection on DiCE genes
 modules <- detect_PPI_unweightedModules(
      gene_list = my_genes,
-     species = "human",
+     interactions_df = intr_df,
      seed = 123
 )
 
@@ -357,13 +372,20 @@ head(modules$membership_df)
 ```
 ### Updates
 
-#### Last update - 16/03/2026
+#### Last update - 20/03/2026
+
+#### Version 2.0.0
+- 23/04/2026 : Added both leiden and louvain algorithms as options to detect weighted/uniweghted module along with their other parameters like, iterations, resolution, beta values.
+- 22/04/2026 : Changed the input formats to the DiCE. DE results as same as before. Gene expression data should be in bioinformatics conventional format(rows are genes, columns are samples). One additional file is needed including sample and corresponding phenotype information.
+- 22/04/2026 : Added new argument to take user defined confidence score threshold for StringDB PPI. 
+- 21/04/2026 : Corrected newwave model and zinbwave model functions to get the denoised gene expression values (mu) - previous function used "assay(zinb,"normalizedValues")" returns the deviance residuals not denoised gene expression values.
 
 #### Version 1.2.3
+- 20/03/2026 : Changed the unweighted modules function to take the interactions directly instead of passing the species.
 - 16/03/2026 : Added flexible rule-based final DiCE gene selection using dice_rules and dice_logic, with support for custom centrality/ensemble cutoffs and rule-tracking columns in the results table.
 
 #### Version 1.2.3
-- 09/03/2026 : Included P-value threshold (default 0.05); correlations with p-value > cutoff are set to 0 (Used Hmisc rcorr()).
+- 09/03/2026 : Included P-value threshold (default 1); correlations with p-value > cutoff are set to 0 (Used Hmisc rcorr()).
 
 #### Version 1.2.1
 - 06/03/2026 - Condition-specific modules returns a dataframe with edges with correspoding modules and weights, and summary of condition-specific intermodule connectivity.

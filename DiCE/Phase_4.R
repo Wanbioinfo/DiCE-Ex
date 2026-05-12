@@ -134,7 +134,10 @@ run_phase4 <- function(phase3_interactions_df, centrality_list) {
   
   # rearrange columns
   base_cols <- c(
-    "Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value",
+    "Gene.Symbol", 
+    if ("STRING_id" %in% colnames(centralities_df)) "STRING_id",
+    if ("BioGRID_id" %in% colnames(centralities_df)) "BioGRID_id",
+    "logFC", "adj.P.Val", "P.Value",
     if ("IG" %in% colnames(centralities_df)) "IG"
   )
   

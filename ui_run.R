@@ -60,26 +60,52 @@ run_tab <- function() {
         # ---- Data uploads ----
         fluidRow(
           
+          # ---- LEFT COLUMN ----
           column(
             width = 6,
+            
+            # Gene expression
             column(
               width = 8,
               fileInput(
                 "expr_file",
                 label = "Gene expression data",
-                accept = c(".csv", ".tsv", ".txt", ".xlsx",".rds")
+                accept = c(".csv", ".tsv", ".txt", ".xlsx", ".rds")
               ),
-              uiOutput("expr_loaded_badge"),
+              uiOutput("expr_loaded_badge")
             ),
+            
             column(
               width = 12,
               helpText(
-                "Upload a normalized expression matrix with genes as columns, ",
-                "samples as rows, and the phenotype/class label in the last column."
+                "Upload a normalized gene expression matrix with samples as columns and ",
+                "genes as rows."
+              )
+            ),
+            
+            br(),
+            
+            # Metadata file
+            column(
+              width = 8,
+              fileInput(
+                "metadata_file",
+                label = "Metadata file",
+                accept = c(".csv", ".tsv", ".txt", ".xlsx", ".rds")
+              ),
+              uiOutput("metadata_loaded_badge")
+            ),
+            
+            column(
+              width = 12,
+              helpText(
+                "Upload a metadata table containing sample information with column names sample_id ",
+                "and phenotype/treatment/group. "
               )
             )
           ),
           
+          # ---- RIGHT COLUMN ----
           column(
             width = 6,
             column(
@@ -87,10 +113,11 @@ run_tab <- function() {
               fileInput(
                 "dge_file",
                 label = "Differential gene expression results",
-                accept = c(".csv", ".tsv", ".txt", ".xlsx",".rds")
+                accept = c(".csv", ".tsv", ".txt", ".xlsx", ".rds")
               ),
-              uiOutput("dge_loaded_badge"),
+              uiOutput("dge_loaded_badge")
             ),
+            
             column(
               width = 12,
               helpText(
@@ -148,6 +175,26 @@ run_tab <- function() {
             )
           )
         ),
+        
+        tags$hr(),
+        
+        # ---- Protein coding filter ----
+        fluidRow(
+          column(
+            width = 12,
+            
+            checkboxInput(
+              "remove_pc_genes",
+              label = "Filter out non-protein coding genes",
+              value = TRUE
+            ),
+            
+            helpText(
+              "If selected, only protein-coding genes will be retained for downstream analysis."
+            )
+          )
+        ),
+        
         
         tags$hr(),
         
@@ -365,10 +412,40 @@ run_tab <- function() {
             
             p(
               style = "margin-bottom:10px;",
-              "Build condition-specific STRING PPI networks with correlation-based edge weights."
+              "Build condition-specific PPI networks with correlation-based edge weights."
             ),
             
             fluidRow(
+              
+              column(
+                4,
+                selectInput(
+                  "phase3_ppi_db",
+                  "PPI database",
+                  choices = c(
+                    "STRINGdb" = "stringdb",
+                    "BioGRID"  = "biogrid"
+                  ),
+                  selected = "stringdb"
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.phase3_ppi_db == 'stringdb'",
+                
+                column(
+                  4,
+                  numericInput(
+                    "phase3_string_confidence",
+                    "STRING confidence score",
+                    value = 400,
+                    min = 0,
+                    max = 1000,
+                    step = 50
+                  )
+                )
+              ),
+              
               column(
                 4,
                 selectInput(
@@ -448,11 +525,11 @@ run_tab <- function() {
         # Phase V – DiCE rule filtering
         div(
           style = "
-    border:1px solid #e5e5e5;
-    border-radius:10px;
-    margin-bottom:12px;
-    padding:0;
-  ",
+          border:1px solid #e5e5e5;
+          border-radius:10px;
+          margin-bottom:12px;
+          padding:0;
+        ",
           
           tags$div(
             class = "toggle-header collapsed",
@@ -461,15 +538,15 @@ run_tab <- function() {
             role = "button",
             `aria-expanded` = "false",
             style = "
-      padding:12px 15px;
-      background-color:#f5f5f5;
-      border-radius:10px 10px 0 0;
-      cursor:pointer;
-      font-weight:600;
-      color:#004b4b;
-      position:relative;
-      margin-bottom:0;
-    ",
+              padding:12px 15px;
+              background-color:#f5f5f5;
+              border-radius:10px 10px 0 0;
+              cursor:pointer;
+              font-weight:600;
+              color:#004b4b;
+              position:relative;
+              margin-bottom:0;
+            ",
             "Phase V – DiCE Rule Filtering",
             tags$span(class = "toggle-arrow")
           ),
@@ -526,8 +603,8 @@ run_tab <- function() {
                   radioButtons(
                     "phase5_dice_logic",
                     "How to combine multiple rules",
-                    choices = c("AND" = "and", "OR" = "or"),
-                    selected = "and",
+                    choices = c("AND" = "AND", "OR" = "OR"),
+                    selected = "AND",
                     inline = TRUE
                   )
                 )
@@ -535,6 +612,166 @@ run_tab <- function() {
             )
           )
         ),
+        
+        # Module Analysis
+        div(
+          style = "
+          border:1px solid #e5e5e5;
+          border-radius:10px;
+          margin-bottom:12px;
+          padding:0;
+        ",
+          
+          tags$div(
+            class = "toggle-header collapsed",
+            `data-toggle` = "collapse",
+            `data-target` = "#module_panel",
+            role = "button",
+            `aria-expanded` = "false",
+            style = "
+            padding:12px 15px;
+            background-color:#f5f5f5;
+            border-radius:10px 10px 0 0;
+            cursor:pointer;
+            font-weight:600;
+            color:#004b4b;
+            position:relative;
+            margin-bottom:0;
+          ",
+            "Module Analysis",
+            tags$span(class = "toggle-arrow")
+          ),
+          
+          div(
+            id = "module_panel",
+            class = "collapse",
+            style = "padding:15px;",
+            
+            p(
+              style = "margin-bottom:12px;",
+              "Run module detection on final DiCE genes using unweighted or weighted PPI networks."
+            ),
+            
+            # ---------------- UNWEIGHTED MODULES ----------------
+            
+            h4("Unweighted modules"),
+            
+            fluidRow(
+              
+              column(
+                3,
+                selectInput(
+                  "unweighted_module_algorithm",
+                  "Algorithm",
+                  choices = c(
+                    "Louvain" = "louvain",
+                    "Leiden"  = "leiden"
+                  ),
+                  selected = "louvain"
+                )
+              ),
+              
+              column(
+                3,
+                numericInput(
+                  "unweighted_module_resolution",
+                  "Resolution",
+                  value = 1,
+                  min = 0,
+                  max = 1,
+                  step = 0.1
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.unweighted_module_algorithm == 'leiden'",
+                
+                column(
+                  3,
+                  numericInput(
+                    "unweighted_module_leiden_itrs",
+                    "Leiden iterations",
+                    value = 3,
+                    min = 1,
+                    step = 1
+                  )
+                ),
+                
+                column(
+                  3,
+                  numericInput(
+                    "unweighted_module_leiden_beta",
+                    "Leiden beta",
+                    value = 0.01,
+                    min = 0,
+                    step = 0.01
+                  )
+                )
+              )
+            ),
+            
+            tags$hr(),
+            
+            # ---------------- WEIGHTED MODULES ----------------
+            
+            h4("Weighted modules"),
+            
+            fluidRow(
+              
+              column(
+                3,
+                selectInput(
+                  "weighted_module_algorithm",
+                  "Algorithm",
+                  choices = c(
+                    "Louvain" = "louvain",
+                    "Leiden"  = "leiden"
+                  ),
+                  selected = "louvain"
+                )
+              ),
+              
+              column(
+                3,
+                numericInput(
+                  "weighted_module_resolution",
+                  "Resolution",
+                  value = 1,
+                  min = 0,
+                  max = 1,
+                  step = 0.1
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.weighted_module_algorithm == 'leiden'",
+                
+                column(
+                  3,
+                  numericInput(
+                    "weighted_module_leiden_itrs",
+                    "Leiden iterations",
+                    value = 3,
+                    min = 1,
+                    step = 1
+                  )
+                ),
+                
+                column(
+                  3,
+                  numericInput(
+                    "weighted_module_leiden_beta",
+                    "Leiden beta",
+                    value = 0.01,
+                    min = 0,
+                    step = 0.01
+                  )
+                )
+              )
+            )
+          )
+        ),
+      
         
         tags$hr(),
         

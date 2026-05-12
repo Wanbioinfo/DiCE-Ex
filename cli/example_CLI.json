@@ -2,6 +2,7 @@
   "species": "human",
   "dge_file_path": "sample_data/sample_Human_data_DGE.Rds",
   "normGeneExp_file_path": "sample_data/sample_Human_data_geneExp.Rds",
+  "metadata_file_path": "sample_data/sample_Human_metadata.csv",
   "treatment": "Tumor",
   "control": "Normal",
   "loose_criteria": "adj.P.Val",
@@ -12,6 +13,9 @@
   "ig_cutoff": "all_mean",
   "ig_custom_cutoff": null,
   "corr_method": "pearson",
+  "ppi_db": "stringdb",
+  "stringDB_confidence": 400,
+  "remove_pc_genes": false,
   "centrality_list": "betweenness,eigenvector",
   "dice_rules": [
     {
@@ -27,7 +31,25 @@
     }
   ],
   "dice_logic": "OR",
-  "run_modules": true,
+  "modules": {
+    "run": true,
+    
+    "unweighted": {
+      "enabled": true,
+      "algorithm": "louvain",
+      "resolution": 1,
+      "leiden_itrs": 10,
+      "leiden_beta": 0.01
+    },
+    
+    "weighted": {
+      "enabled": true,
+      "algorithm": "louvain",
+      "resolution": 1,
+      "leiden_itrs": 10,
+      "leiden_beta": 0.01
+    }
+  },
   "seed": 123,
   "outdir": "dice_cli_output",
   "job_name": "DiCE_CLI_Run"

@@ -4,9 +4,10 @@
 #'
 #' @param data_type Sequencing data type ("bulkRNA-seq" OR "scRNA-seq"). Default "bulkRNA-seq".
 #' @param species "human" or "mouse". Default "human".
-#' @param dge_file_path File path to the differential gene expression '.Rds' file. The columns must include: "Gene.Symbol", "logFC", "P.Value", "adj.P.Val".
-#' @param normGeneExp_file_path File path for the normalized gene expression '.Rds' file (cells/samples x genes + label column).
-#' @param rawGeneExp_file_path File path for the raw UMI counts '.Rds' file (only needed when data_type = "scRNA-seq"). (cells x genes + label column)
+#' @param dge_file_path File path to the differential gene expression Rds/xlsx/csv/tsv file. The columns must include: "Gene.Symbol", "logFC", "P.Value", "adj.P.Val".
+#' @param normGeneExp_file_path File path for the normalized gene expression Rds/xlsx/csv/tsv file (genes x samples/cells; make sure genes are under "Gene.Symbol" column).
+#' @param rawGeneExp_file_path File path for the raw UMI counts Rds/xlsx/csv/tsv file (only needed when data_type = "scRNA-seq"). (genes x samples/cells; make sure genes are under "Gene.Symbol" column)
+#' @param metadata_file_path Path to sample/cell metadata file (Rds/xlsx/csv/tsv). Must contain "Sample" or "Cell" and 'Phenotype' columns.
 #' @param treatment Label of treatment samples (e.g., "Tumor").
 #' @param control Label of control samples (e.g., "Normal").
 #' @param remove_pc_genes If TRUE, protein-coding genes are removed from the input data before analysis. Default TRUE.
@@ -34,11 +35,16 @@
 #' @param corr_mode Mode for computing gene–gene correlation. Options are:
 #' \describe{
 #'   \item{"directCorr"}{Use raw or normalized expression values without dropping zero-expression cells. (Default)}
-#'   \item{"remove_Zerocells"}{Exclude cell pairs where both genes have zero expression before computing correlation.}
-#'   \item{"ZINB-WaVE"}{Apply ZINB-WaVE denoising before computing correlation.}
+#'   \item{"remove_zerocells"}{Exclude cell pairs where both genes have zero expression before computing correlation.}
+#'   \item{"zinbwave"}{Apply Zinb-Wave model for gene expression denoising before computing correlation (for scRNA-seq data).}
+#'   \item{"newwave"}{Apply NewWave model for gene expression denoising before computing correlation (for scRNA-seq data).}
 #' }
+#' @param n_denoise_latent Number of latent factors used for single-cell normalization (K in zinbwave/newwave models). Default is 5.
+#' @param max_denoise_iters Maximum number of iterations for the optimization step in denosing models (maxiter_optimize in zinbwave/newwave models). Default is 100).
 #' @param corr_method Correlation method ("pearson" OR "spearman"). Default "pearson".
 #' @param corr_pval_cutoff P-value threshold (default 1, no filtering); correlations with p-value > cutoff are set to 0.
+#' @param ppi_db Database name for the PPI network. "stringdb" or "biogrid". Default is "stringdb".
+#' @param stringDB_confidence Cutoff for confidence score in Stringdb PPI (Default is 400).
 #' @param centrality_list Character vector of centrality metrics to compute.  
 #'   Valid options include: "betweenness", "eigen vector", "pagerank", "closeness", "harmonic", "authority", "strength". 
 #'   (Names are normalized internally.)
@@ -102,16 +108,12 @@
 #' @importFrom igraph graph_from_data_frame set_edge_attr E E<- V V<-
 #' @importFrom igraph eigen_centrality betweenness authority_score closeness
 #' @importFrom igraph harmonic_centrality page_rank strength simplify
-#' @importFrom igraph cluster_louvain membership sizes modularity
+#' @importFrom igraph cluster_louvain membership sizes modularity cluster_leiden
 #' @importFrom igraph induced_subgraph degree vcount ecount as_adj
 #' @importFrom utils stack combn read.csv read.delim read.table
 #' @importFrom parallel mclapply
 #' @importFrom NetWeaver ensemble_rank
-#' @importFrom zinbwave zinbwave
-#' @importFrom SingleCellExperiment SingleCellExperiment
-#' @importFrom NewWave newWave
 #' @importFrom scuttle logNormCounts
-#' @importFrom SummarizedExperiment assay SummarizedExperiment
 #' @importFrom stats cor quantile median as.formula setNames sd
 #' @importFrom BiocParallel register MulticoreParam
 #' @importFrom readxl read_excel
@@ -129,6 +131,7 @@
 #'   data_type = "bulkRNA-seq",
 #'   dge_file_path = "path/to/dge_results.rds",
 #'   normGeneExp_file_path = "path/to/logNorm_geneExp.rds",
+#'   metadata_file_path = "path/to/metadata.rds",
 #'   treatment = "Tumor",
 #'   control = "Normal",
 #'   loose_criteria = "adj.P.Val",
@@ -153,6 +156,7 @@ perform_DiCE <- function(
     dge_file_path = NULL,
     normGeneExp_file_path = NULL,
     rawGeneExp_file_path = NULL,
+    metadata_file_path = NULL,
     treatment = NULL,
     control = NULL,
     remove_pc_genes = TRUE,
@@ -164,9 +168,12 @@ perform_DiCE <- function(
     ig_cutoff = "all_mean",
     ig_custom_cutoff = NULL, 
     corr_mode = "directCorr",
-    newwave_K = 5,
+    n_denoise_latent = 5,
+    max_denoise_iters = 100,
     corr_method = "pearson",
-    corr_pval_cutoff = 0.05,
+    corr_pval_cutoff = 1,
+    ppi_db = "stringdb",
+    stringDB_confidence = 400,
     centrality_list = c("betweenness", "eigen vector"),
     dice_rules = list(
       dice_centrality_rule(
@@ -188,21 +195,25 @@ perform_DiCE <- function(
   dge_data <- NULL
   normGeneExp_data <- NULL
   rawGeneExp_data <- NULL
-  
-  if (data_type == "bulkRNA-seq"){
-    corr_mode <- "directCorr"
-    corr_method <- "pearson"
-  }
+
 
   # String db downloaded files
   if(tolower(species) == "human"){
     string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
+    
+    biogrid_ppi_file <- "extdata/biogrid/mouse/BIOGRID-ORGANISM-Homo_sapiens-5.0.257.tab.txt.gz"
+    
     taxonID <- 9606
+    
   }else if(tolower(species) == "mouse"){
     string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
+    
+    biogrid_ppi_file <- "extdata/biogrid/human/BIOGRID-ORGANISM-Mus_musculus-5.0.257.tab.txt.gz"
+    
     taxonID = 10090
+    
   }else{
     stop("Invalid species!. DiCE supports only for 'human' and 'mouse'")
   }
@@ -218,6 +229,14 @@ perform_DiCE <- function(
   
   dge_data <- read_any(dge_file_path)
   
+  
+  # Load meta data file
+  if (is.null(metadata_file_path) || !file.exists(metadata_file_path)) {
+    stop("Invalid or missing 'metadata_file_path'")
+  }
+  
+  meta_data <- read_any(metadata_file_path)
+  
   if (data_type == "scRNA-seq") {
     
     
@@ -227,6 +246,7 @@ perform_DiCE <- function(
     }
     
     rawGeneExp_data <- read_any(rawGeneExp_file_path)
+    
     
     # read normalized 
     if (tolower(ig_method) %in% c("ig", "wig")) {
@@ -246,6 +266,7 @@ perform_DiCE <- function(
       }
       
       normGeneExp_data <- read_any(normGeneExp_file_path)
+
     }
     
   } else if (data_type == "bulkRNA-seq") {
@@ -253,6 +274,7 @@ perform_DiCE <- function(
       stop("Invalid or missing 'normGeneExp_file_path'.")
     }
     normGeneExp_data <- read_any(normGeneExp_file_path)
+  
     
   } else {
     stop("Invalid value for 'data_type'. Select from 'bulkRNA-seq' or 'scRNA-seq'.")
@@ -260,6 +282,23 @@ perform_DiCE <- function(
   
   # Change column names to DiCE col names
   dge_data <- normalize_dge_cols(dge_data)
+  
+  ###################### Remake the gene expression data ################################
+  
+  if (!is.null(rawGeneExp_data)){
+    rawGeneExp_data <- exp_to_DiCE_format(meta_data,rawGeneExp_data)
+    rawGeneExp_data <- NA_to_numeric(rawGeneExp_data)
+  }
+  
+  if (!is.null(normGeneExp_data)){
+    normGeneExp_data <- exp_to_DiCE_format(meta_data,normGeneExp_data)
+    normGeneExp_data <- NA_to_numeric(normGeneExp_data)
+  }
+  
+  
+  
+  
+  
   
   ###################### Keep only protein coding genes #################################
   
@@ -354,12 +393,27 @@ perform_DiCE <- function(
   
   # Making weighted PPI using (1-|C.C|) for each phenotype
   
-  message("Phase3: Creating PPI network for Phase2 genes from StringDB")
+  
   
   # Extract interactions
-  ppi_results_phase3 <- extract_PPI(string_protInfo_file, 
-                                    string_ppi_file, 
-                                    to_phase3)
+  if(tolower(ppi_db) == "stringdb"){
+    message("Phase3: Creating PPI network for Phase2 genes from StringDB")
+    
+    ppi_results_phase3 <- extract_stringdb_PPI(string_protInfo_file, 
+                                               string_ppi_file, 
+                                               stringDB_confidence,
+                                               to_phase3)
+  }else if (tolower(ppi_db) == "biogrid"){
+    message("Phase3: Creating PPI network for Phase2 genes from BioGRID")
+    
+    ppi_results_phase3 <- extract_biogrid_PPI(biogrid_ppi_file,
+                                              to_phase3)
+    
+  }else{
+    stop("Invalid value for 'ppi_db'. Allowed values are: 'stringdb', or 'biogrid'.")
+  }
+  
+
   pp_interactions <- ppi_results_phase3$interactions
   mapped_proteins <- ppi_results_phase3$mapped_proteins
   
@@ -376,9 +430,18 @@ perform_DiCE <- function(
                                                       mapped_proteins)
   }
   
-  if (corr_mode == "ZINB-WaVE"){
-    print("Raw gene expression - ZINB-WaVE")
-    filtered_denoised_geneExp <- zinbWave_model(filtered_raw_geneExp)
+  if (corr_mode == "zinbwave"){
+    print("Raw gene expression - zinbwave denoising")
+    filtered_denoised_geneExp <- zinbWave_model(raw_geneExp = filtered_raw_geneExp, 
+                                                K = n_denoise_latent,
+                                                maxIters = max_denoise_iters)
+    geneExp_to_corr <- filtered_denoised_geneExp
+    
+  }else if (corr_mode == "newwave"){
+    print("Raw gene expression - NewWaVE denoising")
+    filtered_denoised_geneExp <- newWave_model(raw_geneExp = filtered_raw_geneExp, 
+                                               K = n_denoise_latent,
+                                               maxIters = max_denoise_iters)
     geneExp_to_corr <- filtered_denoised_geneExp
     
   }else if ((corr_mode == "directCorr") | (corr_mode == "remove_Zerocells")){
@@ -386,7 +449,7 @@ perform_DiCE <- function(
     geneExp_to_corr <- filtered_normGeneExp_data
     
   }else{
-    stop("Invalid correlation mode. Use 'directCorr', 'remove_Zerocells', 'ZINB-WaVE'")
+    stop("Invalid correlation mode. Use 'directCorr', 'remove_Zerocells', 'zinbwave', or 'newwave'")
   }
   
   # Run Phase 3
@@ -398,14 +461,17 @@ perform_DiCE <- function(
     stop("Missing 'control'")
   }
   
+  
   phase3_interactions_df <- run_phase3(pp_interactions, geneExp_to_corr, treatment, control, 
                            corr_method, corr_mode, corr_pval_cutoff)
   
   phase3_genes <- unique(c(phase3_interactions_df$source, phase3_interactions_df$target))
 
-  
-  message(paste0("#Genes in Phase3 (PPI) = "),length(phase3_genes))
-  
+  if(tolower(ppi_db) == "stringdb"){
+    message(paste0("#Genes in Phase3 (StringDB PPI - ",stringDB_confidence," ) = "),length(phase3_genes))
+  }else{
+    message(paste0("#Genes in Phase3 (BioGRID PPI) = "),length(phase3_genes))
+  }
 
   
   ############################### Phase 4 ###############################################
@@ -421,7 +487,13 @@ perform_DiCE <- function(
   colnames(phase4_centralities_out_df)[1] <- "Gene.Symbol"
   
   # Rearrange the columns
-  base_cols <- c("Gene.Symbol", "STRING_id", "logFC", "adj.P.Val", "P.Value", if ("IG" %in% colnames(phase4_centralities_out_df)) "IG")
+  base_cols <- c("Gene.Symbol", 
+                 if ("STRING_id" %in% colnames(phase4_centralities_out_df)) "STRING_id",
+                 if ("BioGRID_id" %in% colnames(phase4_centralities_out_df)) "BioGRID_id",
+                 "logFC", 
+                 "adj.P.Val", 
+                 "P.Value", 
+                 if ("IG" %in% colnames(phase4_centralities_out_df)) "IG")
   cent_cols <- colnames(phase4_centralities_out_df)[2:((length(centrality_list)*4)+1)]
   tail_cols <- "Phase"
   final_cols <- c(base_cols, cent_cols, tail_cols)
@@ -468,14 +540,21 @@ perform_DiCE <- function(
   
   ############################### Return output ########################################
   
+  # remove PPI id col
+  # Remove STRING_id and BioGRID_id columns if they exist
+  cols_to_remove <- c("STRING_id", "BioGRID_id")
+  dice_results_df <- dice_results_df[, !colnames(dice_results_df) %in% cols_to_remove]
+  
   # rename treatment and control column names to original names
   colnames(phase3_interactions_df) <- gsub("treatment", treatment, colnames(phase3_interactions_df))
   colnames(phase3_interactions_df) <- gsub("control", control, colnames(phase3_interactions_df))
   
-  if (data_type == "scRNA-seq" & corr_mode == "ZINB-WaVE"){
-    return(list(dice_results_df = dice_results_df,
-                interactions_df = phase3_interactions_df,
-                phase2_denoised_geneExp = filtered_denoised_geneExp))
+  if (data_type == "scRNA-seq" & tolower(corr_mode) %in% c("zinbwave", "newwave")) {
+    return(list(
+      dice_results_df = dice_results_df,
+      interactions_df = phase3_interactions_df,
+      phase2_denoised_geneExp = filtered_denoised_geneExp
+    ))
   }
   
   return(list(dice_results_df = dice_results_df,

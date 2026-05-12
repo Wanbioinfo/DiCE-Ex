@@ -1,6 +1,9 @@
 #################################
 ## app.R – combine all UI tabs ##
 #################################
+Sys.setenv(R_KEYRING_BACKEND = "env")
+options(keyring_backend = "env")
+
 
 options(shiny.maxRequestSize = 500 * 1024^3)
 

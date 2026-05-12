@@ -13,7 +13,7 @@
   "ig_cutoff": "all_mean",
   "ig_custom_cutoff": null,
   "corr_method": "pearson",
-  "ppi_db": "stringdb",
+  "ppi_db": "biogrid",
   "stringDB_confidence": 400,
   "remove_pc_genes": false,
   "centrality_list": "betweenness,eigenvector",

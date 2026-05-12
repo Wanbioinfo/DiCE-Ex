@@ -151,10 +151,11 @@ extract_stringdb_PPI <- function(string_protInfo_file, string_ppi_file, stringDB
 #' Helper function (not for users)
 #'
 #' @param biogrid_ppi_file Filepath of the BioGrid PPI file
+#' @param taxonID taxonomy id
 #' @param phase2_res Dataframe of Phase 2 results
 #' @return Dataframe of PPIs 
 #' @return Dataframe of vertices with the Gene.Symbol and String_ID
 #' @noRd
-extract_biogrid_PPI <- function(biogrid_ppi_file, phase2_res){
-  return(create_biogridPPI_fromPhase2(biogrid_ppi_file, phase2_res))
+extract_biogrid_PPI <- function(biogrid_ppi_file, taxonID, phase2_res){
+  return(create_biogridPPI_fromPhase2(biogrid_ppi_file, taxonID, phase2_res))
 }

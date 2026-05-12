@@ -202,7 +202,7 @@ perform_DiCE <- function(
     string_protInfo_file <- "extdata/stringDB_v12/human/9606.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/human/9606.protein.links.v12.0.txt.gz"
     
-    biogrid_ppi_file <- "extdata/biogrid/mouse/BIOGRID-ORGANISM-Homo_sapiens-5.0.257.tab.txt.gz"
+    biogrid_ppi_file <- "extdata/biogrid/human/BIOGRID-ORGANISM-Homo_sapiens-5.0.257.tab.txt.gz"
     
     taxonID <- 9606
     
@@ -210,7 +210,7 @@ perform_DiCE <- function(
     string_protInfo_file <- "extdata/stringDB_v12/mouse/10090.protein.info.v12.0.txt"
     string_ppi_file <- "extdata/stringDB_v12/mouse/10090.protein.links.v12.0.txt.gz"
     
-    biogrid_ppi_file <- "extdata/biogrid/human/BIOGRID-ORGANISM-Mus_musculus-5.0.257.tab.txt.gz"
+    biogrid_ppi_file <- "extdata/biogrid/mouse/BIOGRID-ORGANISM-Mus_musculus-5.0.257.tab.txt.gz"
     
     taxonID = 10090
     
@@ -407,6 +407,7 @@ perform_DiCE <- function(
     message("Phase3: Creating PPI network for Phase2 genes from BioGRID")
     
     ppi_results_phase3 <- extract_biogrid_PPI(biogrid_ppi_file,
+                                              taxonID,
                                               to_phase3)
     
   }else{

@@ -2565,7 +2565,7 @@ server <- function(input, output, session) {
           tags$ul(
             tags$li("Expression matrix: Genes should be provided as rows under Gene column, and the samples as columns. Sample names should not be placed in the first column."),
             tags$li("Differential gene expression analysis file: must include gene name, logFC, p-value, and adjusted p-value."),
-            tag$li("Metadata file containing sample information must be provided. Samples should be under Sample_ID column and a column with corresponding phenotype or treatment labels."),
+            tags$li("Metadata file containing sample information must be provided. Samples should be under Sample_ID column and a column with corresponding phenotype or treatment labels."),
             tags$li("Treatment and control labels must exactly match values in the class column (case-sensitive).")
           ),
           

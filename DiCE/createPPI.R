@@ -98,44 +98,80 @@ create_stringPPI_fromPhase2 <- function(string_protInfo_file,
 #' Helper function (not for users)
 #'
 #' @param biogrid_ppi_file Filepath of the BioGrid PPI file
+#' @param taxonID taxonomy id
 #' @param phase2_res Dataframe of Phase 2 results
 #' @return Dataframe of PPIs
 #' @return Dataframe of vertices with the Gene.Symbol and String_ID
 #' @noRd
-create_biogridPPI_fromPhase2 <- function(biogrid_ppi_file, phase2_res){
+create_biogridPPI_fromPhase2 <- function(biogrid_ppi_file, taxonID, phase2_res) {
   
   # Interested protein list from phase 2
   phase2_proteins <- phase2_res$Gene.Symbol
   
-  # Read BioGRID interaction file
-  lines <- readLines(biogrid_ppi_file)
+  # Read BioGRID interaction file — handles both .gz and plain .txt
+  con <- if (grepl("\\.gz$", biogrid_ppi_file)) {
+    gzfile(biogrid_ppi_file, open = "rt")
+  } else {
+    file(biogrid_ppi_file, open = "rt")
+  }
+  lines <- readLines(con)
+  close(con)
+  
   header_line <- which(grepl("^INTERACTOR_A", lines))[1]
   
+  if (is.na(header_line)) {
+    stop("Could not find header line starting with 'INTERACTOR_A' in BioGRID file: ",
+         biogrid_ppi_file)
+  }
+  
   biogrid_df <- read.delim(
-    text = paste(lines[header_line:length(lines)], collapse = "\n"),
-    sep = "\t",
-    quote = "",
-    header = TRUE,
-    stringsAsFactors = FALSE
+    text              = paste(lines[header_line:length(lines)], collapse = "\n"),
+    sep               = "\t",
+    quote             = "",
+    header            = TRUE,
+    stringsAsFactors  = FALSE
   )
   
+  # Validate required columns exist
+  required_cols <- c("INTERACTOR_A", "INTERACTOR_B",
+                     "OFFICIAL_SYMBOL_A", "OFFICIAL_SYMBOL_B",
+                     "ORGANISM_A_ID", "ORGANISM_B_ID")
+  missing_cols <- setdiff(required_cols, names(biogrid_df))
+  if (length(missing_cols) > 0) {
+    stop("BioGRID file is missing required columns: ",
+         paste(missing_cols, collapse = ", "))
+  }
   
-  # Ensure character types
+  # Ensure correct types
   biogrid_df$OFFICIAL_SYMBOL_A <- as.character(biogrid_df$OFFICIAL_SYMBOL_A)
   biogrid_df$OFFICIAL_SYMBOL_B <- as.character(biogrid_df$OFFICIAL_SYMBOL_B)
   biogrid_df$ORGANISM_A_ID     <- as.integer(biogrid_df$ORGANISM_A_ID)
   biogrid_df$ORGANISM_B_ID     <- as.integer(biogrid_df$ORGANISM_B_ID)
   
-  # Keep only human-human interactions (NCBI taxon ID 9606)
-  biogrid_df <- biogrid_df %>%
-    filter(ORGANISM_A_ID == 9606,
-           ORGANISM_B_ID == 9606)
   
+  # Keep only human-human interactions (NCBI taxon ID taxonID)
+  biogrid_df <- biogrid_df %>%
+    filter(ORGANISM_A_ID == taxonID,
+           ORGANISM_B_ID == taxonID)
+  
+  if (nrow(biogrid_df) == 0) {
+    stop("No human-human interactions found in BioGRID file after filtering by taxon ID 9606.")
+  }
   
   # Filter: keep only rows where both interactors are in phase2 proteins
-  interactions <- subset(biogrid_df,
-                         OFFICIAL_SYMBOL_A %in% phase2_proteins &
-                           OFFICIAL_SYMBOL_B %in% phase2_proteins)
+  interactions <- subset(
+    biogrid_df,
+    OFFICIAL_SYMBOL_A %in% phase2_proteins &
+      OFFICIAL_SYMBOL_B %in% phase2_proteins
+  )
+  
+  if (nrow(interactions) == 0) {
+    warning("No BioGRID interactions found between phase 2 proteins.")
+    return(list(
+      interactions    = data.frame(Gene1 = character(), Gene2 = character()),
+      mapped_proteins = phase2_res
+    ))
+  }
   
   # Enforce canonical order to remove duplicates (A < B lexicographically)
   interactions$Gene1 <- pmin(interactions$OFFICIAL_SYMBOL_A,
@@ -155,34 +191,40 @@ create_biogridPPI_fromPhase2 <- function(biogrid_ppi_file, phase2_res){
   
   # Check number of unique proteins involved
   vertices <- unique(c(interactions$Gene1, interactions$Gene2))
+  message("BioGRID PPI: ", nrow(interactions), " interactions among ",
+          length(vertices), " proteins.")
   
-  # Build a mapping of Gene Symbol -> BioGRID Interactor ID
-  # Extract both directions (A and B) and combine
+  # Build Gene Symbol -> BioGRID Interactor ID mapping
   biogrid_id_map <- rbind(
     biogrid_df[, c("INTERACTOR_A", "OFFICIAL_SYMBOL_A")] %>%
-      rename(BioGRID_id = INTERACTOR_A, Gene.Symbol = OFFICIAL_SYMBOL_A),
+      dplyr::rename(BioGRID_id = INTERACTOR_A,
+                    Gene.Symbol = OFFICIAL_SYMBOL_A),
     biogrid_df[, c("INTERACTOR_B", "OFFICIAL_SYMBOL_B")] %>%
-      rename(BioGRID_id = INTERACTOR_B, Gene.Symbol = OFFICIAL_SYMBOL_B)
+      dplyr::rename(BioGRID_id = INTERACTOR_B,
+                    Gene.Symbol = OFFICIAL_SYMBOL_B)
   ) %>%
-    distinct(Gene.Symbol, .keep_all = TRUE)  # one BioGRID ID per gene symbol
-  
+    dplyr::distinct(Gene.Symbol, .keep_all = TRUE)
   
   # Merge phase2 results with BioGRID IDs
   merged_df <- merge(phase2_res,
                      biogrid_id_map,
-                     by = "Gene.Symbol")
+                     by = "Gene.Symbol",
+                     all.x = TRUE)
   
-  # Build final_df with BioGRID_id instead of STRING_id
-  final_df <- merged_df[, c("Gene.Symbol",
-                            if ("BioGRID_id"  %in% colnames(merged_df)) "BioGRID_id",
-                            if ("logFC"       %in% colnames(merged_df)) "logFC",
-                            if ("adj.P.Val"   %in% colnames(merged_df)) "adj.P.Val",
-                            if ("P.Value"     %in% colnames(merged_df)) "P.Value",
-                            if ("IG"          %in% colnames(merged_df)) "IG")]
+  # Build final_df — keep only columns that exist
+  keep_cols <- c(
+    "Gene.Symbol",
+    if ("BioGRID_id" %in% colnames(merged_df)) "BioGRID_id",
+    if ("logFC"      %in% colnames(merged_df)) "logFC",
+    if ("adj.P.Val"  %in% colnames(merged_df)) "adj.P.Val",
+    if ("P.Value"    %in% colnames(merged_df)) "P.Value",
+    if ("IG"         %in% colnames(merged_df)) "IG"
+  )
   
+  final_df <- merged_df[, keep_cols, drop = FALSE]
   
-  return(list(interactions = interactions,
-              mapped_proteins = final_df))
-
-  
+  return(list(
+    interactions    = interactions,
+    mapped_proteins = final_df
+  ))
 }

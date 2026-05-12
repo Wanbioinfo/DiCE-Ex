@@ -27,7 +27,7 @@ cli_tab <- function() {
       ),
       
       tags$a(
-        href = "https://github.com/Wanbioinfo/DiCE_Ex",
+        href = "https://github.com/Wanbioinfo/DiCE-Ex",
         target = "_blank",
         class = "btn btn-success",
         icon("github"),

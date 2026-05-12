@@ -54,7 +54,7 @@ about_tab <- function() {
         p("Please use our GitHub issue tracker to report bugs, request new features, or ask questions about DiCE-Ex."),
         tags$a(
           "Report an Issue on GitHub",
-          href = "https://github.com/Wanbioinfo/DiCE_Ex/issues",
+          href = "https://github.com/Wanbioinfo/DiCE-Ex/issues",
           target = "_blank",
           class = "btn-doc"
         )
@@ -319,7 +319,7 @@ about_tab <- function() {
           tags$li(
             tags$b("Report bugs / request features: "),
             tags$a(
-              href = "https://github.com/Wanbioinfo/DiCE_Ex/issues",
+              href = "https://github.com/Wanbioinfo/DiCE-Ex/issues",
               target = "_blank",
               "GitHub Issues"
             )

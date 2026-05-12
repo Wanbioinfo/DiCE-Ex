@@ -273,7 +273,7 @@ make_navbar <- function(selected_tab = "home") {
     theme = shinytheme("flatly"),
     title = div(
       span("DiCE-Ex", style = "font-weight:600; font-size: 1.3em;"),
-      span("v1.2.0",  style = "font-size:0.8em; margin-left:8px; color:#dddddd;")
+      span("V2.0.0",  style = "font-size:0.8em; margin-left:8px; color:#dddddd;")
     ),
     windowTitle = "DiCE-Ex",
     selected    = selected_tab,   # <-- IMPORTANT

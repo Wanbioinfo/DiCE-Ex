@@ -1426,7 +1426,34 @@ server <- function(input, output, session) {
   output$phase_summary <- renderUI({
     pl <- phase_lines()
     if (!length(pl)) return(NULL)
-    tags$div(class = "phase-summary", lapply(pl, function(x) tags$p(x)))
+    
+    # Try to get runtime from loaded job's status.json
+    runtime_msg <- NULL
+    
+    jid <- loaded_job_id() %||% job_id_qs()
+    if (!is.null(jid) && nzchar(jid)) {
+      st <- tryCatch(
+        read_status(jid),
+        error = function(e) NULL
+      )
+      if (!is.null(st) && identical(st$state, "finished")) {
+        msg <- st$message
+        if (is.character(msg) && length(msg) == 1 && 
+            !is.na(msg) && nzchar(msg) && 
+            grepl("Runtime:", msg, fixed = TRUE)) {
+          runtime_msg <- sub(".*Runtime:\\s*", "", msg)
+        }
+      }
+    }
+    
+    tags$div(
+      class = "phase-summary",
+      lapply(pl, function(x) tags$p(x)),
+      if (!is.null(runtime_msg)) tags$p(
+        style = "margin-top:6px; font-weight:600; color:#198754;",
+        paste0("Total runtime: ", runtime_msg)
+      )
+    )
   })
   
   ################################

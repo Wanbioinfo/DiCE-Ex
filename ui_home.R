@@ -28,7 +28,7 @@ home_tab <- function() {
           ),
           
           p(
-            "A Web Server for Network-Based Differential-Centrality Gene Analysis.",
+            "A Web Server for Network-Based Differential-Centrality Gene Exploration.",
             style = "font-size:1.2em; color:#e8f7f7; margin-bottom:30px;"
           ),
           

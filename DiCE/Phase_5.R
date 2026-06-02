@@ -231,9 +231,11 @@ apply_dice_rules <- function(dice_results_df, dice_rules, dice_logic = c("AND", 
   dice_results_df$Phase <- old_phase
   dice_results_df$Phase[dice_results_df$DiCE_pass] <- "DiCE"
   
+  last_rank_col <- tail(grep("_rank$", names(dice_results_df), value = TRUE), 1)
+  
   dice_results_df <- dice_results_df %>%
-    dplyr::select(-DiCE_pass) %>% 
-    relocate(Pass_Rules, Pass_Count, .after = EigenVector_rank)
+    dplyr::select(-DiCE_pass) %>%
+    relocate(Pass_Rules, Pass_Count, .after = all_of(last_rank_col))
   
   return(dice_results_df)
 }

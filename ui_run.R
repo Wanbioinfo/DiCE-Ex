@@ -509,7 +509,6 @@ run_tab <- function() {
                   choices = c(
                     "Betweenness" = "betweenness",
                     "Eigenvector" = "eigenvector",
-                    "Degree"      = "degree",
                     "PageRank"    = "pagerank",
                     "Closeness"   = "closeness",
                     "Harmonic"    = "harmonic",

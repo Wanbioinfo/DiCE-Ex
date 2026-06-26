@@ -445,12 +445,12 @@ perform_DiCE <- function(
                                                maxIters = max_denoise_iters)
     geneExp_to_corr <- filtered_denoised_geneExp
     
-  }else if ((corr_mode == "directCorr") | (corr_mode == "remove_Zerocells")){
+  }else if ((corr_mode == "directCorr") | (corr_mode == "remove_zerocells")){
     print("Normalized gene expressions")
     geneExp_to_corr <- filtered_normGeneExp_data
     
   }else{
-    stop("Invalid correlation mode. Use 'directCorr', 'remove_Zerocells', 'zinbwave', or 'newwave'")
+    stop("Invalid correlation mode. Use 'directCorr', 'remove_zerocells', 'zinbwave', or 'newwave'")
   }
   
   # Run Phase 3

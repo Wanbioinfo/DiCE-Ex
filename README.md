@@ -1,7 +1,7 @@
 # DiCE-Ex
 **DiCE-Ex** is an interactive web server implementing the **Differential Centrality-Ensemble (DiCE)** framework for network-based gene discovery from transcriptomic data. The platform enables researchers to identify influential disease-associated genes by integrating differential expression, information-theoretic feature selection, and protein–protein interaction (PPI) network topology—without relying on prior disease annotations.
 
-- Web server link: https://wanbioinfo-dice-ex.share.connect.posit.cloud/
+- Web server link: [https://wanbioinfo-dice-ex.share.connect.posit.cloud/](https://connect.posit.iu.edu/DiCE-Ex/)
 ---
 
 ## Background

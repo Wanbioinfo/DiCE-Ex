@@ -13,7 +13,7 @@
 #' @return Correlation matrix of the Phase 2 genes
 #' @noRd
 calculate_correlation <- function(class_geneExp, corr_method, corr_mode, corr_pval_cutoff){
-  if(corr_mode == "directCorr"){
+  if(corr_mode == "directcorr"){
     corr_matrix <- traditional_corr(class_geneExp, corr_method, corr_pval_cutoff)
     
   }else if (corr_mode == "remove_zerocells"){

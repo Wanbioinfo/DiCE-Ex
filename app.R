@@ -97,6 +97,56 @@ safe_input <- function(x, default = NULL) {
   x
 }
 
+flatten_run_parameters <- function(x, prefix = "") {
+  rows <- list()
+
+  add_value <- function(name, value) {
+    if (is.null(value) || length(value) == 0) value <- ""
+    rows[[length(rows) + 1L]] <<- data.frame(
+      Parameter = name,
+      Value = as.character(value),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  walk_value <- function(value, name) {
+    if (is.data.frame(value)) {
+      for (row_index in seq_len(nrow(value))) {
+        for (column_name in names(value)) {
+          walk_value(
+            value[[column_name]][row_index],
+            sprintf("%s[%d].%s", name, row_index, column_name)
+          )
+        }
+      }
+    } else if (is.list(value)) {
+      value_names <- names(value)
+      for (value_index in seq_along(value)) {
+        child_name <- if (!is.null(value_names) && nzchar(value_names[value_index])) {
+          if (nzchar(name)) paste(name, value_names[value_index], sep = ".") else value_names[value_index]
+        } else {
+          sprintf("%s[%d]", name, value_index)
+        }
+        walk_value(value[[value_index]], child_name)
+      }
+    } else if (length(value) > 1) {
+      for (value_index in seq_along(value)) {
+        walk_value(value[value_index], sprintf("%s[%d]", name, value_index))
+      }
+    } else {
+      add_value(name, value)
+    }
+  }
+
+  walk_value(x, prefix)
+
+  if (length(rows) == 0) {
+    return(data.frame(Parameter = character(), Value = character()))
+  }
+
+  do.call(rbind, rows)
+}
+
 jobs_root <- "jobs"
 dir.create(jobs_root, showWarnings = FALSE, recursive = TRUE)
 
@@ -562,6 +612,46 @@ ui <- function(request) {
         font-family:monospace;
       }
 
+      /* Weighted treatment/control comparison matrix */
+      .weighted-module-comparison {
+        width: 100%;
+        overflow-x: auto;
+        margin-top: 8px;
+      }
+
+      .weighted-module-comparison .dataTables_wrapper {
+        width: 100%;
+      }
+
+      .weighted-module-comparison table.dataTable {
+        width: 100% !important;
+        margin: 0 !important;
+        border-collapse: collapse !important;
+      }
+
+      .weighted-module-comparison table.dataTable thead th,
+      .weighted-module-comparison table.dataTable tbody td {
+        border: 1px solid #c9d1d9 !important;
+        padding: 8px 10px !important;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+
+      .weighted-module-comparison table.dataTable thead th {
+        background: #eef3f7;
+        font-weight: 700;
+        text-align: center !important;
+      }
+
+      .weighted-module-comparison table.dataTable tbody td {
+        text-align: right !important;
+      }
+
+      .weighted-module-comparison table.dataTable thead th:first-child,
+      .weighted-module-comparison table.dataTable tbody td:first-child {
+        text-align: left !important;
+      }
+
       /* --- PPI subnetwork panel --- */
       .module-network-panel {
         background-color: #f8fafc;
@@ -1021,6 +1111,29 @@ server <- function(input, output, session) {
       is.data.frame(modules_membership()) &&
       nrow(modules_membership()) > 0
   })
+
+  weighted_modules_result <- reactive({
+    jid <- loaded_job_id() %||% job_id_qs()
+    req(length(jid) == 1L, !is.na(jid), nzchar(jid))
+
+    weighted_file <- file.path(job_dir(jid), "weighted_modules.rds")
+    if (!file.exists(weighted_file)) {
+      validate("Weighted module results are not available for this job.")
+    }
+
+    weighted_modules <- readRDS(weighted_file)
+    required_fields <- c("module_stats", "cmp_count", "cmp_jaccard")
+    missing_fields <- setdiff(required_fields, names(weighted_modules))
+
+    if (length(missing_fields) > 0) {
+      validate(paste(
+        "Weighted module results are incomplete. Missing:",
+        paste(missing_fields, collapse = ", ")
+      ))
+    }
+
+    weighted_modules
+  })
   
   output$download_module_buttons_ui <- renderUI({
     
@@ -1028,8 +1141,8 @@ server <- function(input, output, session) {
       tags$div(
         style = "display:inline-block; margin-right:10px;",
         downloadButton(
-          outputId = "download_modules_btn",
-          label = "Download unweighted modules",
+          outputId = "download_weighted_modules_btn",
+          label = "Download weighted modules",
           class = "btn btn-success"
         )
       ),
@@ -1037,8 +1150,8 @@ server <- function(input, output, session) {
       tags$div(
         style = "display:inline-block;",
         downloadButton(
-          outputId = "download_weighted_modules_btn",
-          label = "Download weighted modules",
+          outputId = "download_modules_btn",
+          label = "Download unweighted modules",
           class = "btn btn-success"
         )
       )
@@ -1595,6 +1708,93 @@ server <- function(input, output, session) {
       )
     )
   })
+
+  output$weighted_module_comparison_table <- DT::renderDT({
+    weighted_modules <- weighted_modules_result()
+    metric <- input$weighted_module_comparison_metric %||% "count"
+
+    comparison <- if (identical(metric, "jaccard")) {
+      weighted_modules$cmp_jaccard
+    } else {
+      weighted_modules$cmp_count
+    }
+
+    req(comparison)
+    comparison <- as.matrix(comparison)
+    req(nrow(comparison) > 0, ncol(comparison) > 0)
+
+    if (is.null(rownames(comparison)) || is.null(colnames(comparison))) {
+      validate("Weighted module comparison labels are missing.")
+    }
+
+    module_stats <- as.data.frame(weighted_modules$module_stats)
+    required_stats <- c("Module", "Module_Size")
+    missing_stats <- setdiff(required_stats, names(module_stats))
+    if (length(missing_stats) > 0) {
+      validate(paste(
+        "Weighted module statistics are incomplete. Missing:",
+        paste(missing_stats, collapse = ", ")
+      ))
+    }
+
+    size_by_module <- setNames(module_stats$Module_Size, module_stats$Module)
+    treatment_sizes <- unname(size_by_module[rownames(comparison)])
+    control_sizes <- unname(size_by_module[colnames(comparison)])
+
+    if (anyNA(treatment_sizes) || anyNA(control_sizes)) {
+      validate("Module sizes do not match the weighted comparison labels.")
+    }
+
+    if (identical(metric, "jaccard")) {
+      displayed_values <- matrix(
+        formatC(as.numeric(comparison), format = "f", digits = 3),
+        nrow = nrow(comparison),
+        ncol = ncol(comparison),
+        dimnames = dimnames(comparison)
+      )
+    } else {
+      displayed_values <- matrix(
+        formatC(as.numeric(comparison), format = "f", digits = 0),
+        nrow = nrow(comparison),
+        ncol = ncol(comparison),
+        dimnames = dimnames(comparison)
+      )
+    }
+
+    table_data <- data.frame(
+      `Treatment module` = c("#Genes", rownames(displayed_values)),
+      `#Genes` = c("", formatC(treatment_sizes, format = "f", digits = 0)),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    for (control_module in colnames(displayed_values)) {
+      table_data[[control_module]] <- c(
+        formatC(size_by_module[[control_module]], format = "f", digits = 0),
+        displayed_values[, control_module]
+      )
+    }
+
+    DT::datatable(
+      table_data,
+      rownames = FALSE,
+      selection = "none",
+      class = "cell-border stripe hover compact",
+      width = "100%",
+      options = list(
+        dom = "t",
+        paging = FALSE,
+        searching = FALSE,
+        ordering = FALSE,
+        scrollX = FALSE,
+        autoWidth = FALSE,
+        columnDefs = list(
+          list(className = "dt-left", targets = 0),
+          list(className = "dt-right", targets = seq_len(ncol(table_data) - 1))
+        )
+      )
+    )
+  })
   
   output$modules_between_edges_table <- DT::renderDT({
     df <- modules_between_edges()
@@ -1695,8 +1895,67 @@ server <- function(input, output, session) {
       req(df)
       
       if (!is.data.frame(df)) df <- as.data.frame(df)
-      
-      openxlsx::write.xlsx(df, file, rowNames = FALSE)
+
+      jid <- loaded_job_id() %||% job_id_qs()
+      req(length(jid) == 1L, !is.na(jid), nzchar(jid))
+
+      params_file <- file.path(job_dir(jid), "params.json")
+      req(file.exists(params_file))
+
+      saved_params <- jsonlite::read_json(params_file, simplifyVector = FALSE)
+      params_df <- flatten_run_parameters(saved_params)
+
+      log_file <- file.path(job_dir(jid), "log.txt")
+      summary_lines <- if (file.exists(log_file)) {
+        saved_log <- tryCatch(
+          readLines(log_file, warn = FALSE),
+          error = function(e) character(0)
+        )
+        grep("^#Genes in Phase", clean_ansi(saved_log), value = TRUE)
+      } else {
+        phase_lines()
+      }
+
+      saved_status <- tryCatch(read_status(jid), error = function(e) NULL)
+      runtime_line <- character(0)
+      if (!is.null(saved_status) &&
+          is.character(saved_status$message) &&
+          length(saved_status$message) == 1L &&
+          !is.na(saved_status$message) &&
+          grepl("Runtime:", saved_status$message, fixed = TRUE)) {
+        runtime_line <- paste0(
+          "Total runtime: ",
+          sub(".*Runtime:\\s*", "", saved_status$message)
+        )
+      }
+
+      job_name <- safe_input(saved_params$job_title, job_title_val() %||% "")
+      summary_df <- data.frame(
+        Summary = c(
+          paste("Job:", job_name),
+          summary_lines,
+          runtime_line
+        ),
+        stringsAsFactors = FALSE
+      )
+
+      wb <- openxlsx::createWorkbook()
+
+      openxlsx::addWorksheet(wb, "Run parameters")
+      openxlsx::writeData(wb, "Run parameters", params_df)
+      openxlsx::freezePane(wb, "Run parameters", firstRow = TRUE)
+      openxlsx::setColWidths(wb, "Run parameters", cols = 1, widths = 34)
+      openxlsx::setColWidths(wb, "Run parameters", cols = 2, widths = 45)
+
+      openxlsx::addWorksheet(wb, "Run summary")
+      openxlsx::writeData(wb, "Run summary", summary_df)
+      openxlsx::setColWidths(wb, "Run summary", cols = 1, widths = 120)
+
+      openxlsx::addWorksheet(wb, "DiCE results")
+      openxlsx::writeData(wb, "DiCE results", df)
+      openxlsx::freezePane(wb, "DiCE results", firstRow = TRUE)
+
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
     }
   )
   
@@ -2477,14 +2736,7 @@ server <- function(input, output, session) {
                          step="Saving outputs…",
                          pct=98,
                          job_title=params$job_title)
-            
-            write_status(job_id, "finished",
-                         message="Done.",
-                         step="Finished.",
-                         pct=100,
-                         job_title=params$job_title)
-            
-            
+
           },
 
           message = function(m) {

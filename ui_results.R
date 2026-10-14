@@ -29,7 +29,7 @@ results_tab <- function() {
         tabPanel(
           title = "DiCE Results",
           br(),
-          
+
           # Top bar: download button (left) + phase + gene search (right)
           fluidRow(
             column(
@@ -74,10 +74,10 @@ results_tab <- function() {
         ),
         
         ## -------------------------------------------------
-        ## 2. DiCE PPI modules TAB
+        ## 2. PPI modules TAB
         ## -------------------------------------------------
         tabPanel(
-          "DiCE PPI modules",
+          "PPI modules",
           
           br(),
           
@@ -91,7 +91,38 @@ results_tab <- function() {
           br(),
           tags$hr(),
           
-          
+          h3("Modules from weighted PPI"),
+          helpText(
+            "Compare treatment modules (rows) with control modules (columns). The #Genes row and column show each module's total size."
+          ),
+          helpText(
+            "Count: the number of genes shared by each treatment and control module pair."
+          ),
+          helpText(
+            "Jaccard score: the number of shared genes divided by the total number of unique genes in the two modules."
+          ),
+          fluidRow(
+            column(
+              width = 4,
+              selectInput(
+                inputId = "weighted_module_comparison_metric",
+                label = "Display",
+                choices = c(
+                  "Count" = "count",
+                  "Jaccard score" = "jaccard"
+                ),
+                selected = "count",
+                width = "220px"
+              )
+            )
+          ),
+          div(
+            class = "weighted-module-comparison",
+            DT::DTOutput("weighted_module_comparison_table")
+          ),
+          br(),
+          tags$hr(),
+
           h3("Modules from unweighted PPI"),
           
           tags$hr(),

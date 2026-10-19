@@ -46,7 +46,7 @@ home_tab <- function() {
         div(
           style = "margin-top:20px; margin-bottom:40px; text-align:center;",
           
-          h2("About the Tool"),
+          h2("About the Tool-hello"),
           
           p(
             paste(

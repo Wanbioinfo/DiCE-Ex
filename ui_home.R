@@ -50,7 +50,7 @@ home_tab <- function() {
           
           p(
             paste(
-              "DiCE-Web provides an intuitive platform for differential gene discovery using the",
+              "DiCE-Ex provides an intuitive platform for differential gene discovery using the",
               "Differential Centrality-Ensemble (DiCE) framework.",
               "This multi-phase method integrates expression-based gene selection with",
               "network-topology analysis to identify disease-associated critical genes",
@@ -68,7 +68,7 @@ home_tab <- function() {
             paste(
               "has successfully identified key genes and pathways in prostate cancer",
               "and is applicable to both human and mouse transcriptomic datasets.",
-              "DiCE-Web enables researchers to perform end-to-end gene discovery",
+              "DiCE-Ex enables researchers to perform end-to-end gene discovery",
               "directly from their data with clarity and efficiency."
             ),
             style = "max-width:950px;
